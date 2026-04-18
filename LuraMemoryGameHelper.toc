@@ -1,0 +1,8 @@
+## Interface: 120001, 120005
+## Title: Lura Memory Game Helper
+## Notes: Helper for memory game pattern callouts using /say and /rw. Includes editor support files for VSCode WoW API annotations and Lua sources.
+## Author: Tinaria
+## Version: 1.0.5
+## SavedVariables:
+
+LuraMemoryGameHelper.lua
