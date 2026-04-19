@@ -1,0 +1,16 @@
+{
+  "Lua.runtime.version": "Lua 5.1",
+  "Lua.workspace.library": [
+    "d:/vscode-wow-api/luasrc",
+    "d:/vscode-wow-api/Annotations",
+    "d:/World of Warcraft/_retail_/Interface/AddOns/LuraMemoryGameHelper"
+  ],
+  "Lua.workspace.checkThirdParty": false,
+  "Lua.diagnostics.globals": [
+    "CreateFrame",
+    "UIParent",
+    "C_Timer",
+    "print",
+    "DEFAULT_CHAT_FRAME"
+  ]
+}
