@@ -12,5 +12,9 @@
     "C_Timer",
     "print",
     "DEFAULT_CHAT_FRAME"
-  ]
+  ],
+  "telemetry.editStats.details.enabled": true,
+  "telemetry.editStats.showDecorations": true,
+  "telemetry.editStats.showStatusBar": true,
+  "application.experimental.rendererProfiling": true
 }

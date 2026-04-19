@@ -1,6 +1,6 @@
 -- ============================================================
 -- Lura Memory Game Helper
--- Version: 1.0.7
+-- Version: 1.2.0
 --
 -- Created By: Tinaria
 --
@@ -30,9 +30,9 @@
 --   - Clicking a new icon fills the first empty slot.
 --   - Duplicate prevention can be enabled.
 --   - Slot 5 can auto-fill with the only remaining symbol.
---   - Drag an arc icon onto another arc slot to swap/move it.
---   - /lmg undo restores the previous pattern state.
---   - /lmg unlock unlocks the pattern if lock-after-send is enabled.
+--   - Drag a filled arc slot onto another slot to swap.
+--   - Drag a filled arc slot onto an empty slot to move it.
+--   - /lmg undo restores the previous pattern edit.
 -- ============================================================
 
 local ADDON_NAME = "LuraMemoryGameHelper"
@@ -145,8 +145,6 @@ local SEP_ANGLES = { 123.5, 101, 79, 56.5 }
 -- ============================================================
 local AUTO_FILL_SLOT5 = true
 local PREVENT_DUPLICATES = true
-local LOCK_AFTER_SEND = false
-local SHOW_AUTO_FILLED_DIMMED = true
 
 -- ============================================================
 -- Utility scaling helpers
@@ -178,10 +176,6 @@ local SYMS = {
 -- ============================================================
 local state = { nil, nil, nil, nil, nil }
 local autoFilled = { false, false, false, false, false }
-local lastUndoState = nil
-local isPatternLocked = false
-local dragSourceIndex = nil
-
 local win
 local arcIcons = {}
 local contentRegions = {}
@@ -189,6 +183,38 @@ local isCollapsed = false
 local alsoSendRW = false
 local testMode = false
 local slots = {}
+local getArcButtonFromFocusRegion
+
+
+local redraw
+local dragSourceStateIndex = nil
+local dragHoverStateIndex = nil
+local undoState = nil
+
+local function copySlots(src)
+    local out = {}
+    for i = 1, MAX do
+        out[i] = src[i]
+    end
+    return out
+end
+
+local function saveUndoState()
+    undoState = {
+        state = copySlots(state),
+        autoFilled = copySlots(autoFilled),
+    }
+end
+
+local function restoreUndoState()
+    if undoState then
+        state = copySlots(undoState.state)
+        autoFilled = copySlots(undoState.autoFilled)
+        undoState = nil
+        redraw()
+    end
+end
+
 
 -- ============================================================
 -- Shared geometry helpers
@@ -242,6 +268,21 @@ local function recomputeSlots()
 end
 
 recomputeSlots()
+
+getArcButtonFromFocusRegion = function(region)
+    local current = region
+    while current do
+        if current.stateIndex and current.tex then
+            return current
+        end
+        if current.GetParent then
+            current = current:GetParent()
+        else
+            current = nil
+        end
+    end
+    return nil
+end
 
 -- ============================================================
 -- Small string helpers
@@ -303,38 +344,6 @@ end
 -- ============================================================
 -- State helpers
 -- ============================================================
-local function copyArray(src)
-    local out = {}
-    for i = 1, MAX do
-        out[i] = src[i]
-    end
-    return out
-end
-
-local function pushUndoState()
-    lastUndoState = {
-        state = copyArray(state),
-        autoFilled = copyArray(autoFilled),
-        alsoSendRW = alsoSendRW,
-        isPatternLocked = isPatternLocked,
-    }
-end
-
-local function restoreUndoState()
-    if not lastUndoState then
-        return false
-    end
-
-    for i = 1, MAX do
-        state[i] = lastUndoState.state[i]
-        autoFilled[i] = lastUndoState.autoFilled[i]
-    end
-    alsoSendRW = lastUndoState.alsoSendRW
-    isPatternLocked = lastUndoState.isPatternLocked
-    lastUndoState = nil
-    return true
-end
-
 local function clearStateTable()
     for i = 1, MAX do
         state[i] = nil
@@ -342,9 +351,17 @@ local function clearStateTable()
     end
 end
 
+local function clearAutoFilledSlots()
+    for i = 1, MAX do
+        if autoFilled[i] then
+            state[i] = nil
+            autoFilled[i] = false
+        end
+    end
+end
+
 local function clearState()
     clearStateTable()
-    isPatternLocked = false
 end
 
 local function setStateFromDecoded(decoded)
@@ -361,7 +378,6 @@ local function setStateFromDecoded(decoded)
             end
         end
     end
-    isPatternLocked = false
 end
 
 local function stateHasAnyEntries()
@@ -400,34 +416,38 @@ local function getRemainingUnusedSymbol()
     return nil
 end
 
-local function clearAutoFilledSlot5IfPresent()
-    if autoFilled[5] then
-        state[5] = nil
-        autoFilled[5] = false
+local function getSingleEmptySlotIndex()
+    local emptyIndex = nil
+    local emptyCount = 0
+
+    for i = 1, MAX do
+        if not state[i] then
+            emptyIndex = i
+            emptyCount = emptyCount + 1
+        end
     end
+
+    if emptyCount == 1 then
+        return emptyIndex
+    end
+
+    return nil
 end
 
-local function autoFillSlot5IfNeeded()
-    clearAutoFilledSlot5IfPresent()
-
+local function autoFillRemainingSlotIfNeeded()
     if not AUTO_FILL_SLOT5 then
         return
     end
 
-    if state[5] then
+    local emptyIndex = getSingleEmptySlotIndex()
+    if not emptyIndex then
         return
-    end
-
-    for i = 1, 4 do
-        if not state[i] then
-            return
-        end
     end
 
     local remaining = getRemainingUnusedSymbol()
     if remaining then
-        state[5] = remaining
-        autoFilled[5] = true
+        state[emptyIndex] = remaining
+        autoFilled[emptyIndex] = true
     end
 end
 
@@ -439,13 +459,24 @@ end
 -- ...
 -- state[5] -> visual slot 1
 -- ============================================================
-local function redraw()
+redraw = function()
     for visualIndex = 1, MAX do
         local btn = arcIcons[visualIndex]
         if btn then
             btn.tex:SetTexture(nil)
             btn:SetAlpha(1)
-            btn:Hide()
+
+            if isCollapsed then
+                btn:Hide()
+                if btn.placeholder then
+                    btn.placeholder:Hide()
+                end
+            else
+                btn:Show()
+                if btn.placeholder then
+                    btn.placeholder:Show()
+                end
+            end
         end
     end
 
@@ -460,16 +491,18 @@ local function redraw()
             local btn = arcIcons[visualIndex]
             if btn then
                 btn.tex:SetTexture(entry.tex)
-                if SHOW_AUTO_FILLED_DIMMED and autoFilled[stateIndex] then
-                    btn:SetAlpha(0.72)
+                btn:Show()
+                if btn.placeholder then
+                    btn.placeholder:Hide()
+                end
+                if autoFilled[stateIndex] then
+                    btn:SetAlpha(0.75)
                 else
                     btn:SetAlpha(1)
                 end
-                btn:Show()
             end
         end
     end
-
 end
 
 local function patternToText(pattern)
@@ -663,10 +696,6 @@ end
 -- Pattern actions
 -- ============================================================
 local function doClear(sendChat)
-    if isPatternLocked and LOCK_AFTER_SEND then
-        isPatternLocked = false
-    end
-    pushUndoState()
     clearState()
     redraw()
     if sendChat then
@@ -678,29 +707,26 @@ local function sendPattern()
     if not stateHasAnyEntries() then return end
     SendChatMessage(SAY_PREFIX .. " PATTERN: " .. currentPatternText(), "SAY")
     maybeSendRW()
-    if LOCK_AFTER_SEND then
-        isPatternLocked = true
-    end
-    redraw()
 end
 
 local function addSymbol(sym)
-    if isPatternLocked then
-        print("|cffff8080LMG:|r Pattern is locked. Clear or /lmg unlock first.")
+    if PREVENT_DUPLICATES and stateContainsSymbol(sym) then
+        local msg = "LMG: " .. sym.label .. " is already used."
+        if UIErrorsFrame and UIErrorsFrame.AddMessage then
+            UIErrorsFrame:AddMessage(msg, 1.0, 0.35, 0.35, 1.0)
+        end
+        print("|cffff8080" .. msg .. "|r")
         return
     end
 
-    if PREVENT_DUPLICATES and stateContainsSymbol(sym) then
-        print("|cffff8080LMG:|r " .. sym.label .. " is already used.")
-        return
-    end
+    saveUndoState()
+    clearAutoFilledSlots()
 
     for i = 1, MAX do
         if not state[i] then
-            pushUndoState()
             state[i] = sym
             autoFilled[i] = false
-            autoFillSlot5IfNeeded()
+            autoFillRemainingSlotIfNeeded()
             redraw()
             return
         end
@@ -858,10 +884,6 @@ local function buildMainFrame()
         self:StopMovingOrSizing()
     end)
 
-    win:SetScript("OnMouseUp", function()
-        dragSourceIndex = nil
-    end)
-
     win:SetFrameStrata("HIGH")
     win:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -930,74 +952,110 @@ local function buildArcDisplay()
         btn:SetSize(scaleX(UI.arcIconSize), scaleY(UI.arcIconSize))
         btn:SetPoint("CENTER", win, "TOP", slots[visualIndex].x, slots[visualIndex].y)
         btn:Hide()
-        btn:RegisterForClicks("LeftButtonUp")
-        btn:EnableMouse(true)
 
         local tex = btn:CreateTexture(nil, "OVERLAY")
         tex:SetAllPoints()
         btn.tex = tex
 
-        btn.stateIndex = MAX - visualIndex + 1
+        local placeholder = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        placeholder:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        placeholder:SetText("•")
+        placeholder:SetAlpha(0.45)
+        btn.placeholder = placeholder
 
-        btn:SetScript("OnMouseDown", function(self, button)
-            if button ~= "LeftButton" then return end
-            if isPatternLocked then return end
-            if state[self.stateIndex] then
-                dragSourceIndex = self.stateIndex
+        btn.stateIndex = MAX - visualIndex + 1
+        btn:RegisterForDrag("LeftButton")
+
+        btn:SetScript("OnEnter", function(self)
+            if dragSourceStateIndex then
+                dragHoverStateIndex = self.stateIndex
+            end
+
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            local entry = state[self.stateIndex]
+            if entry then
+                GameTooltip:SetText("Click to clear. Drag to move/swap " .. entry.label, 1, 1, 1)
             else
-                dragSourceIndex = nil
+                GameTooltip:SetText("Empty slot", 1, 1, 1)
+            end
+            GameTooltip:Show()
+        end)
+
+        btn:SetScript("OnLeave", function(self)
+            if dragHoverStateIndex == self.stateIndex then
+                dragHoverStateIndex = nil
+            end
+            GameTooltip:Hide()
+        end)
+
+        btn:SetScript("OnDragStart", function(self)
+            if state[self.stateIndex] then
+                dragSourceStateIndex = self.stateIndex
+                dragHoverStateIndex = self.stateIndex
+                self:SetAlpha(0.4)
             end
         end)
 
-        btn:SetScript("OnMouseUp", function(self, button)
-            if button ~= "LeftButton" then return end
+        btn:SetScript("OnDragStop", function(self)
+            local sourceIndex = dragSourceStateIndex
+            local targetIndex = dragHoverStateIndex
 
-            local sourceIndex = dragSourceIndex
-            dragSourceIndex = nil
+            dragSourceStateIndex = nil
+            dragHoverStateIndex = nil
 
-            if isPatternLocked then
-                return
-            end
-
-            if not sourceIndex then
-                return
-            end
-
-            local targetIndex = self.stateIndex
-
-            if sourceIndex == targetIndex then
-                if state[targetIndex] then
-                    pushUndoState()
-                    state[targetIndex] = nil
-                    autoFilled[targetIndex] = false
-                    autoFillSlot5IfNeeded()
-                    redraw()
+            for _, b in ipairs(arcIcons) do
+                if b then
+                    b:SetAlpha(1)
                 end
+            end
+
+            if not sourceIndex or not state[sourceIndex] then
                 return
             end
+
+            local focus = GetMouseFocus and GetMouseFocus() or nil
+            local targetButton = getArcButtonFromFocusRegion(focus)
+            if targetButton then
+                targetIndex = targetButton.stateIndex
+            end
+
+            if not targetIndex or targetIndex == sourceIndex then
+                return
+            end
+
+            saveUndoState()
+            clearAutoFilledSlots()
 
             if not state[sourceIndex] then
                 return
             end
 
-            pushUndoState()
-            state[sourceIndex], state[targetIndex] = state[targetIndex], state[sourceIndex]
-            autoFilled[sourceIndex], autoFilled[targetIndex] = autoFilled[targetIndex], autoFilled[sourceIndex]
-            autoFillSlot5IfNeeded()
+            if state[targetIndex] then
+                state[sourceIndex], state[targetIndex] = state[targetIndex], state[sourceIndex]
+                autoFilled[sourceIndex], autoFilled[targetIndex] = autoFilled[targetIndex], autoFilled[sourceIndex]
+            else
+                state[targetIndex] = state[sourceIndex]
+                autoFilled[targetIndex] = autoFilled[sourceIndex]
+                state[sourceIndex] = nil
+                autoFilled[sourceIndex] = false
+            end
+
+            autoFillRemainingSlotIfNeeded()
             redraw()
         end)
 
-        attachTooltip(btn, "ANCHOR_TOP", function()
-            local entry = state[btn.stateIndex]
-            if not entry then
-                return isPatternLocked and "Empty slot (pattern locked)" or "Empty slot"
-            end
+        btn:SetScript("OnClick", function(self)
+            if state[self.stateIndex] then
+                saveUndoState()
 
-            local suffix = autoFilled[btn.stateIndex] and " (auto-filled)" or ""
-            if isPatternLocked then
-                return entry.label .. suffix .. "\nPattern locked"
+                if not autoFilled[self.stateIndex] then
+                    clearAutoFilledSlots()
+                end
+
+                state[self.stateIndex] = nil
+                autoFilled[self.stateIndex] = false
+                redraw()
             end
-            return entry.label .. suffix .. "\nClick to clear\nDrag to move / swap"
         end)
 
         arcIcons[visualIndex] = registerContent(btn)
@@ -1040,6 +1098,7 @@ local function buildActionButtons()
         "Clear the local pattern and announce [LMG] CLEAR in /say",
         function()
             if not playerCanBroadcast() then return end
+            saveUndoState()
             doClear(true)
         end
     )
@@ -1368,7 +1427,7 @@ local function handleSayMessage(msg)
         local decoded = textToPattern(value)
         if #decoded > 0 then
             setStateFromDecoded(decoded)
-            autoFillSlot5IfNeeded()
+            autoFillRemainingSlotIfNeeded()
             if win and not win:IsShown() then
                 win:Show()
             end
@@ -1414,6 +1473,7 @@ SLASH_LURAMEMORYGAMEHELPER3 = "/luramemory"
 local commands = {
     clear = function()
         if not playerCanBroadcast() then return end
+        saveUndoState()
         doClear(true)
     end,
     say = function()
@@ -1426,23 +1486,13 @@ local commands = {
     hide = function()
         hideWindow()
     end,
-    undo = function()
-        if restoreUndoState() then
-            redraw()
-            print("|cff8cd1ffLMG:|r Restored previous pattern state.")
-        else
-            print("|cffff8080LMG:|r Nothing to undo.")
-        end
-    end,
-    unlock = function()
-        isPatternLocked = false
-        redraw()
-        print("|cff8cd1ffLMG:|r Pattern unlocked.")
-    end,
     test = function()
         testMode = not testMode
         print("|cff8cd1ffLMG Test Mode:|r " .. (testMode and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"))
         updateBroadcastControls()
+    end,
+    undo = function()
+        restoreUndoState()
     end,
 }
 
