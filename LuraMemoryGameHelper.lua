@@ -1,6 +1,6 @@
 -- ============================================================
 -- Lura Memory Game Helper
--- Version: 1.0.5
+-- Version: 1.2.0
 --
 -- Created By: Tinaria
 --
@@ -12,12 +12,6 @@
 -- A visual L'ura memory game helper for those of us who cannot remember
 -- what happened 30 seconds ago.
 --
--- Broadcast note:
--- I do not know yet if every broadcast path will behave exactly as intended,
--- so this build is still part test, part utility, and part questionable life choice.
--- Even if broadcasting is not perfect, it will still provide a handy visual
--- raid reminder, so the day was not completely wasted.
---
 -- Commands:
 --   /lmg
 --   /memorygame
@@ -28,14 +22,17 @@
 --   /lmg show      - shows the addon window
 --   /lmg hide      - hides the addon window
 --
--- Usage notes:
---   Broadcast functions only work if you are raid leader or raid assist,
---   unless test mode is enabled.
---
--- Planned improvements after testing:
---   - Click an icon in the arc to remove it if selected by mistake
---   - Repeat prevention
---   - Possibly auto-fill the last icon
+-- Notes:
+--   - Broadcast functions only work if you are raid leader or raid assist,
+--     unless test mode is enabled.
+--   - Arc slots are clickable.
+--   - Clicking a placed icon clears only that slot.
+--   - Clicking a new icon fills the first empty slot.
+--   - Duplicate prevention can be enabled.
+--   - Slot 5 can auto-fill with the only remaining symbol.
+--   - Drag a filled arc slot onto another slot to swap.
+--   - Drag a filled arc slot onto an empty slot to move it.
+--   - /lmg undo restores the previous pattern edit.
 -- ============================================================
 
 local ADDON_NAME = "LuraMemoryGameHelper"
@@ -100,7 +97,6 @@ local UI = {
     thinSeparatorHeight = 16,
 }
 
--- Base reference size used by scaleX / scaleY
 local BASE_UI = {
     width = 395,
     height = 535,
@@ -134,9 +130,8 @@ local BASE_UI = {
 }
 
 -- ============================================================
--- Arc geometry
--- Keep these values together so recomputeSlots(),
--- buildArcDisplay(), and applyLayout() all agree.
+-- Shared arc constants
+-- Adjust these for the final arc / separator layout.
 -- ============================================================
 local ARC_RADIUS = 200
 local ARC_BOTTOM_DOWN = 250
@@ -144,6 +139,12 @@ local ARC_ANGLES = { 135, 112, 90, 68, 45 }
 
 local SEP_RADIUS_FACTOR = 0.90
 local SEP_ANGLES = { 123.5, 101, 79, 56.5 }
+
+-- ============================================================
+-- Feature toggles
+-- ============================================================
+local AUTO_FILL_SLOT5 = true
+local PREVENT_DUPLICATES = true
 
 -- ============================================================
 -- Utility scaling helpers
@@ -169,15 +170,51 @@ local SYMS = {
 
 -- ============================================================
 -- Runtime state
+-- Fixed slot model:
+-- state[1] through state[5]
+-- nil means the slot is empty.
 -- ============================================================
-local state = {}           -- Current selected pattern
-local win                  -- Main frame
-local arcIcons = {}        -- 5 arc display textures
-local contentRegions = {}  -- Regions hidden while collapsed
+local state = { nil, nil, nil, nil, nil }
+local autoFilled = { false, false, false, false, false }
+local win
+local arcIcons = {}
+local contentRegions = {}
 local isCollapsed = false
 local alsoSendRW = false
 local testMode = false
-local slots = {}           -- Computed arc positions
+local slots = {}
+local getArcButtonFromFocusRegion
+
+
+local redraw
+local dragSourceStateIndex = nil
+local dragHoverStateIndex = nil
+local undoState = nil
+
+local function copySlots(src)
+    local out = {}
+    for i = 1, MAX do
+        out[i] = src[i]
+    end
+    return out
+end
+
+local function saveUndoState()
+    undoState = {
+        state = copySlots(state),
+        autoFilled = copySlots(autoFilled),
+    }
+end
+
+local function restoreUndoState()
+    if undoState then
+        state = copySlots(undoState.state)
+        autoFilled = copySlots(undoState.autoFilled)
+        undoState = nil
+        redraw()
+    end
+end
+
 
 -- ============================================================
 -- Shared geometry helpers
@@ -231,6 +268,21 @@ local function recomputeSlots()
 end
 
 recomputeSlots()
+
+getArcButtonFromFocusRegion = function(region)
+    local current = region
+    while current do
+        if current.stateIndex and current.tex then
+            return current
+        end
+        if current.GetParent then
+            current = current:GetParent()
+        else
+            current = nil
+        end
+    end
+    return nil
+end
 
 -- ============================================================
 -- Small string helpers
@@ -290,20 +342,141 @@ local function getSymByLabel(label)
 end
 
 -- ============================================================
--- Reset current pattern
+-- State helpers
 -- ============================================================
+local function clearStateTable()
+    for i = 1, MAX do
+        state[i] = nil
+        autoFilled[i] = false
+    end
+end
+
+local function clearAutoFilledSlots()
+    for i = 1, MAX do
+        if autoFilled[i] then
+            state[i] = nil
+            autoFilled[i] = false
+        end
+    end
+end
+
 local function clearState()
-    state = {}
+    clearStateTable()
+end
+
+local function setStateFromDecoded(decoded)
+    clearStateTable()
+    local writeIndex = 1
+
+    for i = 1, #decoded do
+        if decoded[i] then
+            state[writeIndex] = decoded[i]
+            autoFilled[writeIndex] = false
+            writeIndex = writeIndex + 1
+            if writeIndex > MAX then
+                break
+            end
+        end
+    end
+end
+
+local function stateHasAnyEntries()
+    for i = 1, MAX do
+        if state[i] then
+            return true
+        end
+    end
+    return false
+end
+
+local function stateContainsSymbol(sym)
+    for i = 1, MAX do
+        if state[i] and state[i].label == sym.label then
+            return true
+        end
+    end
+    return false
+end
+
+local function getRemainingUnusedSymbol()
+    local remaining = nil
+    local remainingCount = 0
+
+    for _, sym in ipairs(SYMS) do
+        if not stateContainsSymbol(sym) then
+            remaining = sym
+            remainingCount = remainingCount + 1
+        end
+    end
+
+    if remainingCount == 1 then
+        return remaining
+    end
+
+    return nil
+end
+
+local function getSingleEmptySlotIndex()
+    local emptyIndex = nil
+    local emptyCount = 0
+
+    for i = 1, MAX do
+        if not state[i] then
+            emptyIndex = i
+            emptyCount = emptyCount + 1
+        end
+    end
+
+    if emptyCount == 1 then
+        return emptyIndex
+    end
+
+    return nil
+end
+
+local function autoFillRemainingSlotIfNeeded()
+    if not AUTO_FILL_SLOT5 then
+        return
+    end
+
+    local emptyIndex = getSingleEmptySlotIndex()
+    if not emptyIndex then
+        return
+    end
+
+    local remaining = getRemainingUnusedSymbol()
+    if remaining then
+        state[emptyIndex] = remaining
+        autoFilled[emptyIndex] = true
+    end
 end
 
 -- ============================================================
 -- Refresh visible arc from current state
--- Pattern fills right-to-left visually.
+-- Visual order remains right-to-left:
+-- state[1] -> visual slot 5
+-- state[2] -> visual slot 4
+-- ...
+-- state[5] -> visual slot 1
 -- ============================================================
-local function redraw()
-    for i = 1, MAX do
-        if arcIcons[i] then
-            arcIcons[i]:Hide()
+redraw = function()
+    for visualIndex = 1, MAX do
+        local btn = arcIcons[visualIndex]
+        if btn then
+            btn.tex:SetTexture(nil)
+            btn:SetAlpha(1)
+
+            if isCollapsed then
+                btn:Hide()
+                if btn.placeholder then
+                    btn.placeholder:Hide()
+                end
+            else
+                btn:Show()
+                if btn.placeholder then
+                    btn.placeholder:Show()
+                end
+            end
         end
     end
 
@@ -311,17 +484,34 @@ local function redraw()
         return
     end
 
-    for i, entry in ipairs(state) do
-        local visualIndex = MAX - i + 1
-        arcIcons[visualIndex]:SetTexture(entry.tex)
-        arcIcons[visualIndex]:Show()
+    for stateIndex = 1, MAX do
+        local entry = state[stateIndex]
+        if entry then
+            local visualIndex = MAX - stateIndex + 1
+            local btn = arcIcons[visualIndex]
+            if btn then
+                btn.tex:SetTexture(entry.tex)
+                btn:Show()
+                if btn.placeholder then
+                    btn.placeholder:Hide()
+                end
+                if autoFilled[stateIndex] then
+                    btn:SetAlpha(0.75)
+                else
+                    btn:SetAlpha(1)
+                end
+            end
+        end
     end
 end
 
 local function patternToText(pattern)
     local parts = {}
-    for _, entry in ipairs(pattern) do
-        parts[#parts + 1] = entry.label
+    for i = 1, MAX do
+        local entry = pattern[i]
+        if entry then
+            parts[#parts + 1] = entry.label
+        end
     end
     return (#parts > 0) and table.concat(parts, " > ") or "(empty)"
 end
@@ -331,7 +521,7 @@ local function currentPatternText()
 end
 
 -- ============================================================
--- Convert chat text back into a pattern
+-- Convert chat text back into a packed decoded array
 -- ============================================================
 local function textToPattern(text)
     local decoded = {}
@@ -365,8 +555,11 @@ end
 
 local function buildRWText()
     local parts = {}
-    for _, entry in ipairs(state) do
-        parts[#parts + 1] = rwLabelForSymbol(entry.label)
+    for i = 1, MAX do
+        local entry = state[i]
+        if entry then
+            parts[#parts + 1] = rwLabelForSymbol(entry.label)
+        end
     end
     if #parts == 0 then
         return nil
@@ -390,7 +583,7 @@ local function playerCanBroadcast()
 end
 
 local function maybeSendRW()
-    if not alsoSendRW or #state == 0 then
+    if not alsoSendRW or not stateHasAnyEntries() then
         return
     end
 
@@ -511,15 +704,33 @@ local function doClear(sendChat)
 end
 
 local function sendPattern()
-    if #state == 0 then return end
+    if not stateHasAnyEntries() then return end
     SendChatMessage(SAY_PREFIX .. " PATTERN: " .. currentPatternText(), "SAY")
     maybeSendRW()
 end
 
 local function addSymbol(sym)
-    if #state >= MAX then return end
-    state[#state + 1] = sym
-    redraw()
+    if PREVENT_DUPLICATES and stateContainsSymbol(sym) then
+        local msg = "LMG: " .. sym.label .. " is already used."
+        if UIErrorsFrame and UIErrorsFrame.AddMessage then
+            UIErrorsFrame:AddMessage(msg, 1.0, 0.35, 0.35, 1.0)
+        end
+        print("|cffff8080" .. msg .. "|r")
+        return
+    end
+
+    saveUndoState()
+    clearAutoFilledSlots()
+
+    for i = 1, MAX do
+        if not state[i] then
+            state[i] = sym
+            autoFilled[i] = false
+            autoFillRemainingSlotIfNeeded()
+            redraw()
+            return
+        end
+    end
 end
 
 -- ============================================================
@@ -580,9 +791,6 @@ local function buildCustomFrameBorder(parent)
     }
 end
 
--- ============================================================
--- Generic textured button helper
--- ============================================================
 local function makeTexturedActionButton(parent, width, height, point, relTo, relPoint, x, y, upTex, downTex, tooltipText, onClick)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(width, height)
@@ -621,9 +829,6 @@ local function makeTexturedActionButton(parent, width, height, point, relTo, rel
     return btn
 end
 
--- ============================================================
--- Decorative inner separator helper
--- ============================================================
 local function makeInnerSeparator(parent, yOffsetFromTop, alpha)
     local sep = parent:CreateTexture(nil, "ARTWORK")
     sep:SetTexture(TEX .. "thin_separator.tga")
@@ -633,9 +838,6 @@ local function makeInnerSeparator(parent, yOffsetFromTop, alpha)
     return sep
 end
 
--- ============================================================
--- Decorative button-row separators
--- ============================================================
 local function makeSeparatorAroundButtons(parent, buttonsFrame, topOffset, bottomOffset, inset, topAlpha, bottomAlpha)
     local width = buttonsFrame:GetWidth() + (inset * 2)
 
@@ -654,9 +856,6 @@ local function makeSeparatorAroundButtons(parent, buttonsFrame, topOffset, botto
     return topSep, bottomSep
 end
 
--- ============================================================
--- Main frame creation
--- ============================================================
 local function buildMainFrame()
     win = CreateFrame("Frame", "LuraMemoryGameHelperWin", UIParent, "BackdropTemplate")
     win:SetSize(UI.width, UI.height)
@@ -697,7 +896,6 @@ local function buildMainFrame()
 
     buildCustomFrameBorder(win)
 
-    -- Bottom-right drag handle for resizing
     local resizeHandle = CreateFrame("Button", nil, win)
     resizeHandle:SetSize(20, 20)
     resizeHandle:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -2, 2)
@@ -723,9 +921,6 @@ local function buildMainFrame()
     win.resizeHandle = resizeHandle
 end
 
--- ============================================================
--- Title bar / close / minimize
--- ============================================================
 local function buildTitleBar()
     local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", win, "TOPRIGHT", 2, 2)
@@ -748,20 +943,122 @@ local function buildTitleBar()
     win.titleTex = title
 end
 
--- ============================================================
--- Arc display area: top separator, arc icons, arc separators,
--- boss label
--- ============================================================
 local function buildArcDisplay()
     local topSep = registerContent(makeInnerSeparator(win, UI.topSeparatorTopOffset, 1))
     win.topInnerSeparator = topSep
 
-    for i = 1, MAX do
-        local tex = registerContent(win:CreateTexture(nil, "OVERLAY"))
-        tex:SetSize(scaleX(UI.arcIconSize), scaleY(UI.arcIconSize))
-        tex:SetPoint("CENTER", win, "TOP", slots[i].x, slots[i].y)
-        tex:Hide()
-        arcIcons[i] = tex
+    for visualIndex = 1, MAX do
+        local btn = CreateFrame("Button", nil, win)
+        btn:SetSize(scaleX(UI.arcIconSize), scaleY(UI.arcIconSize))
+        btn:SetPoint("CENTER", win, "TOP", slots[visualIndex].x, slots[visualIndex].y)
+        btn:Hide()
+
+        local tex = btn:CreateTexture(nil, "OVERLAY")
+        tex:SetAllPoints()
+        btn.tex = tex
+
+        local placeholder = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        placeholder:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        placeholder:SetText("•")
+        placeholder:SetAlpha(0.45)
+        btn.placeholder = placeholder
+
+        btn.stateIndex = MAX - visualIndex + 1
+        btn:RegisterForDrag("LeftButton")
+
+        btn:SetScript("OnEnter", function(self)
+            if dragSourceStateIndex then
+                dragHoverStateIndex = self.stateIndex
+            end
+
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            local entry = state[self.stateIndex]
+            if entry then
+                GameTooltip:SetText("Click to clear. Drag to move/swap " .. entry.label, 1, 1, 1)
+            else
+                GameTooltip:SetText("Empty slot", 1, 1, 1)
+            end
+            GameTooltip:Show()
+        end)
+
+        btn:SetScript("OnLeave", function(self)
+            if dragHoverStateIndex == self.stateIndex then
+                dragHoverStateIndex = nil
+            end
+            GameTooltip:Hide()
+        end)
+
+        btn:SetScript("OnDragStart", function(self)
+            if state[self.stateIndex] then
+                dragSourceStateIndex = self.stateIndex
+                dragHoverStateIndex = self.stateIndex
+                self:SetAlpha(0.4)
+            end
+        end)
+
+        btn:SetScript("OnDragStop", function(self)
+            local sourceIndex = dragSourceStateIndex
+            local targetIndex = dragHoverStateIndex
+
+            dragSourceStateIndex = nil
+            dragHoverStateIndex = nil
+
+            for _, b in ipairs(arcIcons) do
+                if b then
+                    b:SetAlpha(1)
+                end
+            end
+
+            if not sourceIndex or not state[sourceIndex] then
+                return
+            end
+
+            local focus = GetMouseFocus and GetMouseFocus() or nil
+            local targetButton = getArcButtonFromFocusRegion(focus)
+            if targetButton then
+                targetIndex = targetButton.stateIndex
+            end
+
+            if not targetIndex or targetIndex == sourceIndex then
+                return
+            end
+
+            saveUndoState()
+            clearAutoFilledSlots()
+
+            if not state[sourceIndex] then
+                return
+            end
+
+            if state[targetIndex] then
+                state[sourceIndex], state[targetIndex] = state[targetIndex], state[sourceIndex]
+                autoFilled[sourceIndex], autoFilled[targetIndex] = autoFilled[targetIndex], autoFilled[sourceIndex]
+            else
+                state[targetIndex] = state[sourceIndex]
+                autoFilled[targetIndex] = autoFilled[sourceIndex]
+                state[sourceIndex] = nil
+                autoFilled[sourceIndex] = false
+            end
+
+            autoFillRemainingSlotIfNeeded()
+            redraw()
+        end)
+
+        btn:SetScript("OnClick", function(self)
+            if state[self.stateIndex] then
+                saveUndoState()
+
+                if not autoFilled[self.stateIndex] then
+                    clearAutoFilledSlots()
+                end
+
+                state[self.stateIndex] = nil
+                autoFilled[self.stateIndex] = false
+                redraw()
+            end
+        end)
+
+        arcIcons[visualIndex] = registerContent(btn)
     end
 
     win.arcSeparators = {}
@@ -783,9 +1080,6 @@ local function buildArcDisplay()
     win.bossTex = bossLabel
 end
 
--- ============================================================
--- Clear / Send buttons
--- ============================================================
 local function buildActionButtons()
     local totalWidth = (scaleX(UI.actionButtonWidth) * 2) + scaleX(UI.actionButtonGap)
     local buttonsFrame = CreateFrame("Frame", nil, win)
@@ -804,6 +1098,7 @@ local function buildActionButtons()
         "Clear the local pattern and announce [LMG] CLEAR in /say",
         function()
             if not playerCanBroadcast() then return end
+            saveUndoState()
             doClear(true)
         end
     )
@@ -841,9 +1136,6 @@ local function buildActionButtons()
     registerContent(bottomSep)
 end
 
--- ============================================================
--- Optional /rw checkbox
--- ============================================================
 local function buildRWCheckbox()
     local cb = CreateFrame("Button", "LuraMemoryGameHelperRWCheck", win)
     cb:SetSize(scaleX(UI.checkboxSize), scaleY(UI.checkboxSize))
@@ -877,9 +1169,6 @@ local function buildRWCheckbox()
     attachTooltip(cb, "ANCHOR_TOP", "Also send the pattern as a real raid warning message.")
 end
 
--- ============================================================
--- Bottom row of clickable symbol buttons
--- ============================================================
 local function buildSymbolButtons()
     local bSize = scaleX(UI.symbolButtonSize)
     local gap = scaleX(UI.symbolButtonGap)
@@ -924,9 +1213,6 @@ local function buildSymbolButtons()
     end
 end
 
--- ============================================================
--- Reapply all sizes and positions after resize or layout changes
--- ============================================================
 function applyLayout()
     if not win then return end
 
@@ -995,10 +1281,11 @@ function applyLayout()
     end
 
     for i = 1, MAX do
-        if arcIcons[i] then
-            arcIcons[i]:SetSize(scaleX(UI.arcIconSize), scaleY(UI.arcIconSize))
-            arcIcons[i]:ClearAllPoints()
-            arcIcons[i]:SetPoint("CENTER", win, "TOP", slots[i].x, slots[i].y)
+        local btn = arcIcons[i]
+        if btn then
+            btn:SetSize(scaleX(UI.arcIconSize), scaleY(UI.arcIconSize))
+            btn:ClearAllPoints()
+            btn:SetPoint("CENTER", win, "TOP", slots[i].x, slots[i].y)
         end
     end
 
@@ -1075,9 +1362,6 @@ function applyLayout()
     end
 end
 
--- ============================================================
--- Full window construction
--- ============================================================
 local function buildWindow()
     if win then return end
     recomputeSlots()
@@ -1097,9 +1381,6 @@ local function ensureWindowBuilt()
     end
 end
 
--- ============================================================
--- Auto-open / auto-hide based on target raid
--- ============================================================
 local function autoHandleTargetRaid()
     if inTargetRaid() then
         ensureWindowBuilt()
@@ -1114,9 +1395,6 @@ local function autoHandleTargetRaid()
     end
 end
 
--- ============================================================
--- Parse addon chat messages
--- ============================================================
 local function parsePayload(msg)
     local payload = msg and msg:match("^%[LMG%]%s*(.+)$")
     if not payload then
@@ -1148,7 +1426,8 @@ local function handleSayMessage(msg)
     if kind == "pattern" then
         local decoded = textToPattern(value)
         if #decoded > 0 then
-            state = decoded
+            setStateFromDecoded(decoded)
+            autoFillRemainingSlotIfNeeded()
             if win and not win:IsShown() then
                 win:Show()
             end
@@ -1157,9 +1436,6 @@ local function handleSayMessage(msg)
     end
 end
 
--- ============================================================
--- Event handling
--- ============================================================
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("CHAT_MSG_SAY")
@@ -1190,9 +1466,6 @@ ev:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
--- ============================================================
--- Slash commands
--- ============================================================
 SLASH_LURAMEMORYGAMEHELPER1 = "/lmg"
 SLASH_LURAMEMORYGAMEHELPER2 = "/memorygame"
 SLASH_LURAMEMORYGAMEHELPER3 = "/luramemory"
@@ -1200,6 +1473,7 @@ SLASH_LURAMEMORYGAMEHELPER3 = "/luramemory"
 local commands = {
     clear = function()
         if not playerCanBroadcast() then return end
+        saveUndoState()
         doClear(true)
     end,
     say = function()
@@ -1216,6 +1490,9 @@ local commands = {
         testMode = not testMode
         print("|cff8cd1ffLMG Test Mode:|r " .. (testMode and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"))
         updateBroadcastControls()
+    end,
+    undo = function()
+        restoreUndoState()
     end,
 }
 
