@@ -1,6 +1,6 @@
 # Lura Memory Game Helper
 
-Version: 1.0.5
+Version: 1.2.0
 
 Created by Tinaria
 
@@ -19,6 +19,11 @@ The addon currently provides:
 - a movable, resizable window
 - a five-slot visual arc display
 - clickable symbol entry buttons
+- clickable arc slots for per-slot clearing
+- drag-and-drop movement and swapping between populated slots
+- duplicate prevention
+- smart auto-fill of the only remaining empty slot
+- visual distinction for auto-filled entries
 - `/say` pattern broadcasting
 - optional raid warning output
 - raid leader / assistant permission checks for broadcast actions
@@ -26,6 +31,7 @@ The addon currently provides:
 - manual open / hide through slash commands
 - dynamic layout refresh on resize
 - texture-based custom frame and controls
+- one-step undo support
 
 ## Current slash commands
 
@@ -52,6 +58,9 @@ Extra commands:
 - `/lmg test`  
   Toggles test mode so you can test broadcast functionality outside the raid.
 
+- `/lmg undo`  
+  Restores the previous pattern state.
+
 ## Pattern behavior
 
 ### Pattern entry
@@ -64,9 +73,9 @@ The bottom row contains five symbol buttons:
 - Cross
 - T
 
-Clicking a symbol appends it to the current pattern until the pattern reaches five entries.
+Clicking a symbol fills the **first available empty slot**.
 
-Internally, the pattern is stored in `state`.
+Internally, the pattern is stored in `state` as a fixed 5-slot model.
 
 ### Arc display order
 
@@ -74,13 +83,44 @@ The addon stores pattern entries in normal input order, but displays them visual
 
 That means:
 
-- first click appears in slot 5
-- second click appears in slot 4
-- third click appears in slot 3
-- fourth click appears in slot 2
-- fifth click appears in slot 1
+- slot 1 appears in visual slot 5
+- slot 2 appears in visual slot 4
+- slot 3 appears in visual slot 3
+- slot 4 appears in visual slot 2
+- slot 5 appears in visual slot 1
 
 This behavior is handled in `redraw()`.
+
+### Slot editing
+
+Each arc slot can now be edited directly:
+
+- **Click a filled slot** to clear that specific position
+- **Drag a filled slot onto another filled slot** to swap them
+- **Drag a filled slot onto an empty slot** to move it there
+
+Empty slots show a visible marker so drop targets are easier to see.
+
+### Auto-fill behavior
+
+If exactly one symbol remains unused and exactly one slot is empty, the addon can auto-fill that final slot.
+
+This now works from the **current board state**, not only from the original fill order, so it behaves correctly after:
+
+- manual fills
+- clears
+- swaps
+- drag moves
+- undo
+- imported patterns
+
+Auto-filled slots are visually dimmed so they can be distinguished from manual entries.
+
+### Duplicate prevention
+
+Duplicate prevention blocks placing the same symbol more than once when enabled.
+
+If a duplicate is attempted, the addon gives feedback instead of inserting it.
 
 ### Clear behavior
 
@@ -101,6 +141,10 @@ If the raid warning checkbox is enabled, the addon also sends:
 `>>> DIAMOND <> TRIANGLE <> CIRCLE <> CROSS <> tTt <<<`
 
 The `T` symbol is intentionally converted to `tTt` in the raid warning output.
+
+### Undo behavior
+
+The addon supports one-step undo of the most recent edit action.
 
 ## Broadcast permission rules
 
@@ -302,6 +346,8 @@ Expected texture path:
 - `addSymbol()`
 - `sendPattern()`
 - `doClear()`
+- `saveUndoState()`
+- `restoreUndoState()`
 
 ### Chat parsing
 - `parsePayload()`
@@ -317,3 +363,88 @@ Expected texture path:
 - `setCollapsed()`
 - `toggleCollapsed()`
 
+## Removed documentation from older builds
+
+The following older documentation topics were intentionally removed because they no longer reflect the cleaned script:
+
+- direct manual slot tables as the primary system
+- duplicated per-section separator tuning as the intended workflow
+- mixed old and new arc placement methods
+- outdated references to earlier UI tuning experiments that were not kept in the final cleaned version
+
+## Changelog
+
+## ============================================================
+## Lura Memory Game Helper — Changelog
+## ============================================================
+
+### **v1.2.0 — Phase 1 Polish + Smart Autofill**
+- Reworked autofill logic:
+  - now fills the **only remaining empty slot** instead of forcing slot 5
+  - works correctly after drag, swap, clear, and undo
+- Added **auto-filled slot tracking**
+  - auto-filled icons are now visually dimmed
+- Improved editing flow:
+  - clearing a manual slot removes auto-filled slots to prevent instant re-fill conflicts
+- Enhanced UI clarity:
+  - empty slots now display a **visible marker** for easier targeting
+- Improved tooltips:
+  - show slot position
+  - show symbol name
+  - indicate auto-filled slots
+  - explain click/drag behavior
+- Improved duplicate prevention feedback:
+  - now displays clearer on-screen error messaging
+- General stability improvements to drag + state handling
+
+### **v1.1.4 — Stable Drag Foundation**
+- Established stable drag-and-drop system:
+  - drag filled → filled = **swap**
+  - drag filled → empty = **move**
+- Fixed multiple drag edge cases:
+  - empty slot targeting issues
+  - hover detection inconsistencies
+- Added fallback targeting using mouse focus
+- Introduced placeholder markers for empty slots
+- Improved slot interaction consistency across all states
+
+### **v1.1.3 — Drag Target Fix Attempts**
+- Adjusted redraw logic so empty slots remain interactable
+- Began addressing inability to drop onto empty slots
+- Identified limitations of original drag model
+
+### **v1.1.2 — Initial Drag + Undo Implementation**
+- Added drag-and-drop interaction (first iteration)
+- Added `/lmg undo` command
+- Introduced state snapshot system
+- Fixed redraw scope issues causing nil errors
+
+### **v1.1.1 — Drag Fix Pass**
+- Improved drag handling reliability
+- Fixed tooltip conflicts interfering with drag tracking
+- Improved swap behavior between populated slots
+
+### **v1.1.0 — Interaction Expansion**
+- Added clickable arc slots:
+  - click to clear individual positions
+- Added duplicate prevention logic
+- Added initial slot 5 auto-fill behavior
+- Began transition from linear sequence → slot-based system
+
+### **v1.0.5 — UI Refinement**
+- Improved arc layout and positioning
+- Adjusted icon spacing and separator alignment
+- Improved frame sizing and visual balance
+- Added better scaling support within window constraints
+
+### **v1.0.0 — Initial Release**
+- Core L’ura memory helper functionality
+- Arc-based visual pattern display
+- Symbol input system
+- Pattern broadcast via `/say`
+- Optional raid warning broadcast
+- Basic UI with manual interaction
+- Slash command support:
+  - `/lmg`
+  - `/memorygame`
+  - `/luramemory`
