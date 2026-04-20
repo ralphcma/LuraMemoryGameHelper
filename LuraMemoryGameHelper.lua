@@ -73,6 +73,10 @@ local UI = {
     bossLabelY = -130,
     bossWidth = 250,
     bossHeight = 40,
+    luraArtY = -235,
+    luraArtWidth = 190,
+    luraArtHeight = 190,
+    luraArtAlpha = 0.85,
 
     frameInset = 4,
     frameEdge = 12,
@@ -114,6 +118,8 @@ local BASE_UI = {
 
     bossWidth = 250,
     bossHeight = 40,
+    luraArtWidth = 190,
+    luraArtHeight = 190,
 
     frameInset = 4,
     frameEdge = 12,
@@ -1353,7 +1359,7 @@ local function buildDifficultyDropdown()
         addEntry("Mythic (5)", "mythic")
     end)
 
-    win.difficultyDropdown = dd
+    win.difficultyDropdown = registerContent(dd)
     refreshDifficultyDropdown()
 end
 
@@ -1410,6 +1416,12 @@ local function buildMainFrame()
 
     buildCustomFrameBorder(win)
 
+    local luraArt = win:CreateTexture(nil, "BACKGROUND")
+    luraArt:SetTexture(TEX .. "Lura.tga")
+    luraArt:SetBlendMode("BLEND")
+    luraArt:SetAlpha(UI.luraArtAlpha or 0.85)
+    win.luraArt = registerContent(luraArt)
+
     local resizeHandle = CreateFrame("Button", nil, win)
     resizeHandle:SetSize(20, 20)
     resizeHandle:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -2, 2)
@@ -1461,7 +1473,7 @@ local function buildTitleBar()
     statusText:SetPoint("TOP", title, "BOTTOM", 0, -6)
     statusText:SetTextColor(0.85, 0.85, 0.92, 0.90)
     statusText:SetText("Pattern Helper")
-    win.statusText = statusText
+    win.statusText = registerContent(statusText)
 end
 
 local function buildArcDisplay()
@@ -1852,6 +1864,13 @@ function applyLayout()
         win.bossTex:SetSize(scaleX(UI.bossWidth), scaleY(UI.bossHeight))
         win.bossTex:ClearAllPoints()
         win.bossTex:SetPoint("CENTER", win, "TOP", 0, UI.bossLabelY)
+    end
+
+    if win.luraArt then
+        win.luraArt:SetSize(scaleX(UI.luraArtWidth), scaleY(UI.luraArtHeight))
+        win.luraArt:ClearAllPoints()
+        win.luraArt:SetPoint("CENTER", win, "TOP", 0, UI.luraArtY)
+        win.luraArt:SetAlpha(UI.luraArtAlpha or 0.85)
     end
 
     for i = 1, MAX do
