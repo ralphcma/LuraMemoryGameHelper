@@ -5,6 +5,13 @@ Created by Tinaria
 
 Inspired by Lura Tily Helper by tilynye.
 
+It has evolved into something so much more. many features in such a tiny box. 
+
+Raidlead or Assist needs to work it for /RW it to function unless you go into test mode (/lmg test) I'll add a solo option soon enough if it becomes nessacary.
+
+It will broadecast to /say as [LMG] PATTERN: 1 , 2 , 3 , 4 , 5 I'm hoping this works out to populate others addons. if not it will still send the standard /rw message that everone gets.
+let's see what happens!
+
 ---
 
 ## Overview
@@ -16,6 +23,17 @@ The addon emphasizes:
 - minimal input friction
 - consistent spatial memory (arc layout never changes)
 
+**Full on Disclaimer** 
+- I have no idea if the broadcasting to other people with the addon will work at the moment. It will require testing. I have built in a fallback with the raidwarning however.
+- I plan to implement additional visual clarity in a near future update that will hopefully clear the confusion
+
+- Cross = Raid Marker X (Cross) red
+- Diamond = Raid Marker ♦ (diamond) purple
+- Triangle = Raid Marker ▼ (triangle) green
+- Bullseye = Raid Marker O (circle) orange
+- T/Nail = Raid Marker ★ (star) yellow
+
+- I am hoping this will be enough of a fallback it becomes a viable workaround for those that need this addon
 ---
 
 ## Current Feature Set (v1.4.4)
