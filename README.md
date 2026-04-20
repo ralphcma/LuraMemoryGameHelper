@@ -5,9 +5,22 @@ Created by Tinaria
 
 Inspired by Lura Tily Helper by tilynye.
 
+It has evolved into something so much more. many features in such a tiny box. 
+
 ---
 
-## Overview
+## Some Upfront information
+
+Must be Raidlead or Assist for /RW broadcasting to function unless you go into test mode 
+(/lmg test) I'll add a solo option soon enough if it becomes nessacary.
+
+It will broadecast to /say as [LMG] PATTERN: 1 , 2 , 3 , 4 , 5 I'm hoping this works out
+to populate others addons. if not it will still send the standard /rw message that everone gets.
+let's see what happens!
+
+---
+
+### Overview
 Lura Memory Game Helper is a World of Warcraft addon designed for the L’ura encounter. It provides a fast, visual system to build, manage, and broadcast memory patterns using a consistent arc-based layout.
 
 The addon emphasizes:
@@ -16,9 +29,33 @@ The addon emphasizes:
 - minimal input friction
 - consistent spatial memory (arc layout never changes)
 
+**Full on Disclaimer** 
+- I have no idea if the broadcasting to other people with the addon will work at the moment. It will require testing. I have built in a fallback with the raidwarning however.
+- I plan to implement additional visual clarity in a near future update that will hopefully clear the confusion
+
+- Cross = Raid Marker X (Cross) red
+- Diamond = Raid Marker ♦ (diamond) purple
+- Triangle = Raid Marker ▼ (triangle) green
+- Bullseye = Raid Marker O (circle) orange
+- T/Nail = Raid Marker ★ (star) yellow
+
+- I am hoping this will be enough of a fallback it becomes a viable workaround for those that need this addon
 ---
 
-## Current Feature Set (v1.4.4)
+####
+
+On the list for the near future
+
+- Minimap Icon and ability to move it to the add-on compartment
+- Settings window
+- True Scaling, not this drag a corner crap
+- Code moved into a modular structure to make my life easier (I never expected it to get this out of hand)
+
+- This is the end of my babbeling 
+
+#### #######################################################################################################################################################################################################
+
+### Current Feature Set (v1.4.4)
 
 ### Pattern Interaction
 - Five-slot internal pattern system
@@ -63,13 +100,13 @@ Normal:
 - Uses 3 slots (2,3,4)
 
 Heroic / Mythic:
-- Uses all 5 slots
+- Uses all 5 slots - Mythic will have the CW/CCW logic added shortly. it requires some extra trickery
 
 Dropdown options:
 - Auto
 - Normal (3)
 - Heroic (5)
-- Mythic (5)
+- Mythic (5) (this still needs the clockwise/counter clockwise logic added. Give me a week or so to get to it!)
 
 ---
 
@@ -255,5 +292,3 @@ updateBroadcastControls()
 ### v1.0.0 — Initial Release
 - core functionality
 - arc display
-- symbol input
-- broadcast system
