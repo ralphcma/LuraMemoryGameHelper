@@ -1,6 +1,6 @@
 -- ============================================================
 -- Lura Memory Game Helper
--- Version: 1.5.10
+-- Version: 1.4.6
 --
 -- Created By: Tinaria
 --
@@ -40,16 +40,10 @@
 -- ============================================================
 
 local ADDON_NAME = "LuraMemoryGameHelper"
-local ADDON_VERSION = "1.5.10"
+local ADDON_VERSION = "1.4.6"
 local SAY_PREFIX = "[LMG]"
 local TEX = "Interface\\AddOns\\LuraMemoryGameHelper\\Textures\\"
 local MAX = 5
-
-local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
-local LDBIcon = LibStub and LibStub("LibDBIcon-1.0", true)
-local AceDB = LibStub and LibStub("AceDB-3.0", true)
-local AceConsole = LibStub and LibStub("AceConsole-3.0", true)
-local AceTimer = LibStub and LibStub("AceTimer-3.0", true)
 
 local TARGET_RAID_NAME = "March on Quel'Danas"
 local autoInitialized = false
@@ -79,10 +73,6 @@ local UI = {
     bossLabelY = -130,
     bossWidth = 250,
     bossHeight = 40,
-    luraArtY = -235,
-    luraArtWidth = 190,
-    luraArtHeight = 190,
-    luraArtAlpha = 0.85,
 
     frameInset = 4,
     frameEdge = 12,
@@ -124,8 +114,6 @@ local BASE_UI = {
 
     bossWidth = 250,
     bossHeight = 40,
-    luraArtWidth = 190,
-    luraArtHeight = 190,
 
     frameInset = 4,
     frameEdge = 12,
@@ -179,16 +167,10 @@ local manualDifficultyOverride = "auto"
 -- Utility scaling helpers
 -- ============================================================
 local function scaleX(value)
-    if value == nil then
-        return 0
-    end
     return math.floor((value * UI.width / BASE_UI.width) + 0.5)
 end
 
 local function scaleY(value)
-    if value == nil then
-        return 0
-    end
     return math.floor((value * UI.height / BASE_UI.height) + 0.5)
 end
 
@@ -220,24 +202,9 @@ local testMode = false
 local slots = {}
 local getArcButtonFromFocusRegion
 
--- ============================================================
--- Forward declarations
--- Group these here so async callbacks and cross-references
--- always bind to locals instead of falling back to globals.
--- ============================================================
+
 local redraw
-local applyLayout
 local applyRaidDifficultyPatternMode
-local ensureWindowBuilt
-local handleSlashCommand
-
-local clearState
-local stateHasAnyEntries
-
-local cancelAutoClearTimer
-local handleAutoClearTimer
-local refreshAutoClearTimer
-
 local dragSourceStateIndex = nil
 local dragHoverStateIndex = nil
 local undoState = nil
@@ -246,92 +213,92 @@ local lastFullPattern = nil
 local isPatternLocked = false
 local changelogFrame = nil
 local settingsFrame = nil
-local commandHost = {}
-local timerHost = {}
+local minimapButton = nil
 local DB_NAME = "LuraMemoryGameHelperDB"
-local AUTO_CLEAR_SECONDS = 10
-local autoClearTimerHandle = nil
-local addonDB
 
 local DEFAULT_DB = {
-    profile = {
-        window = {
-            width = UI.width,
-            height = UI.height,
-            point = UI.windowAnchor,
-            relativePoint = UI.windowRelativePoint,
-            x = UI.windowOffsetX,
-            y = UI.windowOffsetY,
-            collapsed = false,
-        },
-        settings = {
-            autoFill = true,
-            preventDuplicates = true,
-            lockAfterSend = false,
-            alsoSendRW = false,
-            changelogDismissedVersion = "",
-            difficultyMode = "auto",
-        },
-        minimap = {
-            hide = false,
-            minimapPos = 220,
-        },
+    window = {
+        width = UI.width,
+        height = UI.height,
+        point = UI.windowAnchor,
+        relativePoint = UI.windowRelativePoint,
+        x = UI.windowOffsetX,
+        y = UI.windowOffsetY,
+        collapsed = false,
     },
+    settings = {
+        autoFill = true,
+        preventDuplicates = true,
+        lockAfterSend = false,
+        alsoSendRW = false,
+        changelogDismissedVersion = "",
+        difficultyMode = "auto",
+    },
+    minimap = {
+        hide = false,
+        angle = 220,
+    }
 }
 
-local function getProfile()
-    return addonDB and addonDB.profile or nil
-end
 
-local function getWindowDB()
-    local profile = getProfile()
-    return profile and profile.window or nil
-end
-
-local function getSettingsDB()
-    local profile = getProfile()
-    return profile and profile.settings or nil
-end
-
-local function getMinimapDB()
-    local profile = getProfile()
-    return profile and profile.minimap or nil
+local function ensureSubTable(root, key)
+    if type(root[key]) ~= "table" then
+        root[key] = {}
+    end
+    return root[key]
 end
 
 local function initializeDB()
-    if not AceDB then
-        error("AceDB-3.0 is required but was not found. Check your .toc library order.")
+    if type(_G[DB_NAME]) ~= "table" then
+        _G[DB_NAME] = {}
     end
 
-    addonDB = AceDB:New(DB_NAME, DEFAULT_DB, true)
+    local db = _G[DB_NAME]
+    local window = ensureSubTable(db, "window")
+    local settings = ensureSubTable(db, "settings")
+    local minimap = ensureSubTable(db, "minimap")
 
-    local window = getWindowDB()
-    local settings = getSettingsDB()
-
-    UI.width = math.max(UI.minWidth, math.min(UI.maxWidth, tonumber(window and window.width) or UI.width))
-    UI.height = math.max(UI.minHeight, math.min(UI.maxHeight, tonumber(window and window.height) or UI.height))
-    UI.windowAnchor = (window and window.point) or UI.windowAnchor
-    UI.windowRelativePoint = (window and window.relativePoint) or UI.windowRelativePoint
-    UI.windowOffsetX = tonumber(window and window.x) or UI.windowOffsetX
-    UI.windowOffsetY = tonumber(window and window.y) or UI.windowOffsetY
-    isCollapsed = not not (window and window.collapsed)
-
-    AUTO_FILL_SLOT5 = not not (settings and settings.autoFill)
-    PREVENT_DUPLICATES = not not (settings and settings.preventDuplicates)
-    LOCK_AFTER_SEND = not not (settings and settings.lockAfterSend)
-    alsoSendRW = not not (settings and settings.alsoSendRW)
-    if settings then
-        settings.changelogDismissedVersion = settings.changelogDismissedVersion or ""
-        manualDifficultyOverride = settings.difficultyMode or "auto"
+    for k, v in pairs(DEFAULT_DB.window) do
+        if window[k] == nil then
+            window[k] = v
+        end
     end
+
+    for k, v in pairs(DEFAULT_DB.settings) do
+        if settings[k] == nil then
+            settings[k] = v
+        end
+    end
+
+    for k, v in pairs(DEFAULT_DB.minimap) do
+        if minimap[k] == nil then
+            minimap[k] = v
+        end
+    end
+
+    UI.width = math.max(UI.minWidth, math.min(UI.maxWidth, tonumber(window.width) or UI.width))
+    UI.height = math.max(UI.minHeight, math.min(UI.maxHeight, tonumber(window.height) or UI.height))
+    UI.windowAnchor = window.point or UI.windowAnchor
+    UI.windowRelativePoint = window.relativePoint or UI.windowRelativePoint
+    UI.windowOffsetX = tonumber(window.x) or UI.windowOffsetX
+    UI.windowOffsetY = tonumber(window.y) or UI.windowOffsetY
+    isCollapsed = not not window.collapsed
+
+    AUTO_FILL_SLOT5 = not not settings.autoFill
+    PREVENT_DUPLICATES = not not settings.preventDuplicates
+    LOCK_AFTER_SEND = not not settings.lockAfterSend
+    alsoSendRW = not not settings.alsoSendRW
+    settings.changelogDismissedVersion = settings.changelogDismissedVersion or ""
+    manualDifficultyOverride = settings.difficultyMode or "auto"
 end
 
 local function saveWindowState()
-    local window = getWindowDB()
-    if not window then
+    if not _G[DB_NAME] or type(_G[DB_NAME]) ~= "table" then
         return
     end
 
+    local db = _G[DB_NAME]
+    local window = ensureSubTable(db, "window")
     window.width = UI.width
     window.height = UI.height
     window.collapsed = isCollapsed
@@ -351,11 +318,12 @@ local function saveWindowState()
 end
 
 local function saveSettingsState()
-    local settings = getSettingsDB()
-    if not settings then
+    if not _G[DB_NAME] or type(_G[DB_NAME]) ~= "table" then
         return
     end
 
+    local db = _G[DB_NAME]
+    local settings = ensureSubTable(db, "settings")
     settings.autoFill = AUTO_FILL_SLOT5
     settings.preventDuplicates = PREVENT_DUPLICATES
     settings.lockAfterSend = LOCK_AFTER_SEND
@@ -364,49 +332,26 @@ local function saveSettingsState()
     settings.difficultyMode = manualDifficultyOverride or "auto"
 end
 
+
+local function getMinimapDB()
+    if type(_G[DB_NAME]) ~= "table" then
+        return nil
+    end
+    local db = _G[DB_NAME]
+    return ensureSubTable(db, "minimap")
+end
+
+local function saveMinimapState(angle, hide)
+    local mm = getMinimapDB()
+    if not mm then return end
+    if angle ~= nil then mm.angle = angle end
+    if hide ~= nil then mm.hide = hide end
+end
+
 local function notifyInfo(msg)
     print("|cff8cd1ffLMG:|r " .. msg)
 end
 
-if AceConsole then
-    AceConsole:Embed(commandHost)
-end
-
-if AceTimer then
-    AceTimer:Embed(timerHost)
-end
-
-
-cancelAutoClearTimer = function()
-    if autoClearTimerHandle and timerHost and timerHost.CancelTimer then
-        timerHost:CancelTimer(autoClearTimerHandle)
-    end
-    autoClearTimerHandle = nil
-end
-
-handleAutoClearTimer = function()
-    autoClearTimerHandle = nil
-    if not stateHasAnyEntries() then
-        return
-    end
-
-    clearState()
-    isPatternLocked = false
-    redraw()
-    notifyInfo("Pattern auto-cleared after " .. AUTO_CLEAR_SECONDS .. " seconds.")
-end
-
-refreshAutoClearTimer = function()
-    cancelAutoClearTimer()
-
-    if not stateHasAnyEntries() then
-        return
-    end
-
-    if timerHost and timerHost.ScheduleTimer then
-        autoClearTimerHandle = timerHost:ScheduleTimer(handleAutoClearTimer, AUTO_CLEAR_SECONDS)
-    end
-end
 
 local CHANGELOG_TEXT = table.concat({
     "Lura Memory Game Helper v" .. ADDON_VERSION,
@@ -428,16 +373,16 @@ local CHANGELOG_TEXT = table.concat({
 }, "\n")
 
 local function shouldShowChangelog()
-    local settings = getSettingsDB()
-    return settings and settings.changelogDismissedVersion ~= ADDON_VERSION
+    local db = _G[DB_NAME]
+    return db and db.settings and db.settings.changelogDismissedVersion ~= ADDON_VERSION
 end
 
 local function setChangelogDismissedForCurrentVersion(shouldDismiss)
-    local settings = getSettingsDB()
-    if not settings then
+    local db = _G[DB_NAME]
+    if not db or not db.settings then
         return
     end
-    settings.changelogDismissedVersion = shouldDismiss and ADDON_VERSION or ""
+    db.settings.changelogDismissedVersion = shouldDismiss and ADDON_VERSION or ""
 end
 
 local function buildChangelogFrame()
@@ -822,7 +767,7 @@ local function clearAutoFilledSlots()
     end
 end
 
-clearState = function()
+local function clearState()
     clearStateTable()
 end
 
@@ -844,7 +789,7 @@ local function setStateFromDecoded(decoded)
     end
 end
 
-stateHasAnyEntries = function()
+local function stateHasAnyEntries()
     for _, i in ipairs(getActiveSlotIndices()) do
         if state[i] then
             return true
@@ -1184,7 +1129,6 @@ end
 -- Pattern actions
 -- ============================================================
 local function doClear(sendChat)
-    cancelAutoClearTimer()
     clearState()
     isPatternLocked = false
     redraw()
@@ -1211,7 +1155,6 @@ local function sendPattern()
         notifyInfo("Pattern locked after send. Use /lmg unlock or clear the pattern.")
     end
 
-    refreshAutoClearTimer()
     redraw()
 end
 
@@ -1439,25 +1382,17 @@ local function buildDifficultyDropdown()
         addEntry("Mythic (5)", "mythic")
     end)
 
-    win.difficultyDropdown = registerContent(dd)
+    win.difficultyDropdown = dd
     refreshDifficultyDropdown()
 end
 
 
 local function refreshSettingsControls()
-    if not settingsFrame then
-        return
-    end
+    if not settingsFrame then return end
 
-    if settingsFrame.autoFillCB then
-        settingsFrame.autoFillCB:SetChecked(AUTO_FILL_SLOT5)
-    end
-    if settingsFrame.dupCB then
-        settingsFrame.dupCB:SetChecked(PREVENT_DUPLICATES)
-    end
-    if settingsFrame.lockCB then
-        settingsFrame.lockCB:SetChecked(LOCK_AFTER_SEND)
-    end
+    if settingsFrame.autoFillCB then settingsFrame.autoFillCB:SetChecked(AUTO_FILL_SLOT5) end
+    if settingsFrame.dupCB then settingsFrame.dupCB:SetChecked(PREVENT_DUPLICATES) end
+    if settingsFrame.lockCB then settingsFrame.lockCB:SetChecked(LOCK_AFTER_SEND) end
     if settingsFrame.rwCB then
         local enabled = playerCanBroadcast()
         settingsFrame.rwCB:SetChecked(alsoSendRW)
@@ -1470,9 +1405,7 @@ local function refreshSettingsControls()
 end
 
 local function toggleSettingsWindow()
-    if not settingsFrame then
-        return
-    end
+    if not settingsFrame then return end
     if settingsFrame:IsShown() then
         settingsFrame:Hide()
     else
@@ -1482,12 +1415,10 @@ local function toggleSettingsWindow()
 end
 
 local function buildSettingsWindow()
-    if settingsFrame then
-        return
-    end
+    if settingsFrame then return end
 
     local f = CreateFrame("Frame", "LuraMemoryGameHelperSettings", UIParent, "BackdropTemplate")
-    f:SetSize(380, 270)
+    f:SetSize(360, 250)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
     f:SetMovable(true)
@@ -1562,16 +1493,13 @@ local function buildSettingsWindow()
             info.func = function()
                 manualDifficultyOverride = mode
                 saveSettingsState()
-                if win and win.difficultyDropdown then
-                    refreshDifficultyDropdown()
-                end
+                if win and win.difficultyDropdown then refreshDifficultyDropdown() end
                 applyRaidDifficultyPatternMode()
                 refreshSettingsControls()
             end
             info.checked = (manualDifficultyOverride == mode)
             UIDropDownMenu_AddButton(info, level)
         end
-
         addEntry("Auto", "auto")
         addEntry("Normal (3)", "normal")
         addEntry("Heroic (5)", "heroic")
@@ -1608,6 +1536,79 @@ local function buildSettingsWindow()
 
     settingsFrame = f
     refreshSettingsControls()
+end
+
+local function positionMinimapButton()
+    if not minimapButton then return end
+    local mm = getMinimapDB()
+    local angle = ((mm and mm.angle) or 220) * math.pi / 180
+    local radius = 80
+    local x = math.cos(angle) * radius
+    local y = math.sin(angle) * radius
+    minimapButton:ClearAllPoints()
+    minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
+    if mm and mm.hide then minimapButton:Hide() else minimapButton:Show() end
+end
+
+local function initMinimapButton()
+    if minimapButton or not Minimap then return end
+
+    local btn = CreateFrame("Button", "LuraMemoryGameHelperMinimapButton", Minimap)
+    btn:SetSize(31, 31)
+    btn:SetFrameStrata("MEDIUM")
+    btn:RegisterForDrag("LeftButton")
+
+    local icon = btn:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(20, 20)
+    icon:SetPoint("CENTER")
+    icon:SetTexture(TEX .. "sym_circle.tga")
+
+    local overlay = btn:CreateTexture(nil, "OVERLAY")
+    overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    overlay:SetSize(53, 53)
+    overlay:SetPoint("TOPLEFT")
+
+    btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Lura Memory Game Helper", 1, 1, 1)
+        GameTooltip:AddLine("Left-Click: Toggle main window", 1, 0.82, 0)
+        GameTooltip:AddLine("Right-Click: Open settings", 1, 0.82, 0)
+        GameTooltip:AddLine("Drag: Move around minimap", 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    btn:SetScript("OnClick", function(_, button)
+        ensureWindowBuilt()
+        if button == "RightButton" then
+            buildSettingsWindow()
+            toggleSettingsWindow()
+        else
+            toggleWindow()
+        end
+    end)
+
+    btn:SetScript("OnDragStart", function(self)
+        self:SetScript("OnUpdate", function()
+            local mx, my = Minimap:GetCenter()
+            local cx, cy = GetCursorPosition()
+            local scale = UIParent:GetEffectiveScale()
+            cx = cx / scale
+            cy = cy / scale
+            local angle = math.deg(math.atan2(cy - my, cx - mx))
+            saveMinimapState(angle, false)
+            positionMinimapButton()
+        end)
+    end)
+
+    btn:SetScript("OnDragStop", function(self)
+        self:SetScript("OnUpdate", nil)
+    end)
+
+    minimapButton = btn
+    positionMinimapButton()
 end
 
 local function buildMainFrame()
@@ -1663,12 +1664,6 @@ local function buildMainFrame()
 
     buildCustomFrameBorder(win)
 
-    local luraArt = win:CreateTexture(nil, "BACKGROUND")
-    luraArt:SetTexture(TEX .. "Lura.tga")
-    luraArt:SetBlendMode("BLEND")
-    luraArt:SetAlpha(UI.luraArtAlpha or 0.85)
-    win.luraArt = registerContent(luraArt)
-
     local resizeHandle = CreateFrame("Button", nil, win)
     resizeHandle:SetSize(20, 20)
     resizeHandle:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -2, 2)
@@ -1720,7 +1715,7 @@ local function buildTitleBar()
     statusText:SetPoint("TOP", title, "BOTTOM", 0, -6)
     statusText:SetTextColor(0.85, 0.85, 0.92, 0.90)
     statusText:SetText("Pattern Helper")
-    win.statusText = registerContent(statusText)
+    win.statusText = statusText
 end
 
 local function buildArcDisplay()
@@ -2041,7 +2036,7 @@ local function buildSymbolButtons()
     end
 end
 
-applyLayout = function()
+function applyLayout()
     if not win then return end
 
     recomputeSlots()
@@ -2111,13 +2106,6 @@ applyLayout = function()
         win.bossTex:SetSize(scaleX(UI.bossWidth), scaleY(UI.bossHeight))
         win.bossTex:ClearAllPoints()
         win.bossTex:SetPoint("CENTER", win, "TOP", 0, UI.bossLabelY)
-    end
-
-    if win.luraArt then
-        win.luraArt:SetSize(scaleX(UI.luraArtWidth), scaleY(UI.luraArtHeight))
-        win.luraArt:ClearAllPoints()
-        win.luraArt:SetPoint("CENTER", win, "TOP", 0, UI.luraArtY)
-        win.luraArt:SetAlpha(UI.luraArtAlpha or 0.85)
     end
 
     for i = 1, MAX do
@@ -2247,46 +2235,13 @@ local function buildWindow()
     end
 end
 
-ensureWindowBuilt = function()
+local function ensureWindowBuilt()
     if not win then
         buildWindow()
     end
     if not settingsFrame then
         buildSettingsWindow()
     end
-end
-
-local function initMinimap()
-    if not LDB or not LDBIcon then
-        return
-    end
-
-    local minimap = getMinimapDB()
-    if not minimap then
-        return
-    end
-
-    local launcher = LDB:NewDataObject(ADDON_NAME, {
-        type = "launcher",
-        text = "Lura Memory Game Helper",
-        icon = TEX .. "sym_circle.tga",
-        OnClick = function(_, button)
-            ensureWindowBuilt()
-            if button == "RightButton" then
-                toggleSettingsWindow()
-            else
-                toggleWindow()
-            end
-        end,
-        OnTooltipShow = function(tooltip)
-            tooltip:SetText("Lura Memory Game Helper", 1, 1, 1)
-            tooltip:AddLine("Left-Click: Toggle main window", 1, 0.82, 0)
-            tooltip:AddLine("Right-Click: Open settings", 1, 0.82, 0)
-            tooltip:Show()
-        end,
-    })
-
-    LDBIcon:Register(ADDON_NAME, launcher, minimap)
 end
 
 applyRaidDifficultyPatternMode = function()
@@ -2308,7 +2263,6 @@ applyRaidDifficultyPatternMode = function()
     currentPatternSlotCount = newSlotCount
 
     if shouldClear then
-        cancelAutoClearTimer()
         clearState()
         isPatternLocked = false
         if hadEntries then
@@ -2401,20 +2355,6 @@ local function handleSayMessage(msg, author)
     end
 end
 
-
-local function registerSlashCommands()
-    if commandHost and commandHost.RegisterChatCommand then
-        commandHost:RegisterChatCommand("lmg", handleSlashCommand)
-        commandHost:RegisterChatCommand("memorygame", handleSlashCommand)
-        commandHost:RegisterChatCommand("luramemory", handleSlashCommand)
-    end
-
-    SLASH_LURAMEMORYGAMEHELPER1 = "/lmg"
-    SLASH_LURAMEMORYGAMEHELPER2 = "/memorygame"
-    SLASH_LURAMEMORYGAMEHELPER3 = "/luramemory"
-    SlashCmdList["LURAMEMORYGAMEHELPER"] = handleSlashCommand
-end
-
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("CHAT_MSG_SAY")
@@ -2428,10 +2368,9 @@ ev:SetScript("OnEvent", function(_, event, ...)
         if addonName == ADDON_NAME then
             initializeDB()
             currentPatternSlotCount = getPatternSlotCountForCurrentDifficulty()
-            buildSettingsWindow()
-            initMinimap()
-            registerSlashCommands()
             print("|cff8cd1ffLura Memory Game Helper|r loaded! Type |cffffd700/lmg|r to open.")
+            initMinimapButton()
+            buildSettingsWindow()
             showChangelogIfNeeded()
         end
         return
@@ -2451,6 +2390,10 @@ ev:SetScript("OnEvent", function(_, event, ...)
         handleSayMessage(msg, author)
     end
 end)
+
+SLASH_LURAMEMORYGAMEHELPER1 = "/lmg"
+SLASH_LURAMEMORYGAMEHELPER2 = "/memorygame"
+SLASH_LURAMEMORYGAMEHELPER3 = "/luramemory"
 
 local commands = {
     clear = function()
@@ -2513,18 +2456,14 @@ local commands = {
         toggleSettingsWindow()
     end,
     minimap = function()
-        if not LDBIcon or not _G[DB_NAME] or not _G[DB_NAME].minimap then return end
-        local hide = not _G[DB_NAME].minimap.hide
-        _G[DB_NAME].minimap.hide = hide
-        if hide then
-            LDBIcon:Hide(ADDON_NAME)
-        else
-            LDBIcon:Show(ADDON_NAME)
-        end
-        notifyInfo("Minimap button " .. (hide and "hidden." or "shown."))
+        local mm = getMinimapDB()
+        if not mm then return end
+        mm.hide = not mm.hide
+        saveMinimapState(nil, mm.hide)
+        positionMinimapButton()
+        notifyInfo("Minimap button " .. (mm.hide and "hidden." or "shown."))
     end,
     restorefull = function()
-        cancelAutoClearTimer()
         if restoreLastFullPattern() then
             notifyInfo("Restored last full pattern.")
         else
@@ -2533,7 +2472,7 @@ local commands = {
     end,
 }
 
-handleSlashCommand = function(msg)
+SlashCmdList["LURAMEMORYGAMEHELPER"] = function(msg)
     local normalized = normalize(msg)
     local cmd, arg = normalized:match("^(%S+)%s*(.-)$")
     cmd = cmd or ""
@@ -2563,7 +2502,7 @@ handleSlashCommand = function(msg)
             redraw()
             return
         end
-    elseif cmd == "autofill" and arg ~= "" then
+elseif cmd == "autofill" and arg ~= "" then
         if arg == "on" then
             AUTO_FILL_SLOT5 = true
             saveSettingsState()
