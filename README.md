@@ -1,294 +1,351 @@
 # Lura Memory Game Helper
-Version: 1.4.4
+
+Version: 1.5.10
 
 Created by Tinaria
 
 Inspired by Lura Tily Helper by tilynye.
 
-It has evolved into something so much more. many features in such a tiny box. 
+---
+
+## Some Upfront Information
+
+Must be Raid Lead or Assist for /RW broadcasting unless using test mode:
+
+```
+/lmg test
+```
+
+Broadcast behavior:
+
+* `/say` → `[LMG] PATTERN: 1 , 2 , 3 , 4 , 5`
+* `/rw` → fallback formatted message
 
 ---
 
-## Some Upfront information
+## Overview
 
-Must be Raidlead or Assist for /RW broadcasting to function unless you go into test mode 
-(/lmg test) I'll add a solo option soon enough if it becomes nessacary.
-
-It will broadecast to /say as [LMG] PATTERN: 1 , 2 , 3 , 4 , 5 I'm hoping this works out
-to populate others addons. if not it will still send the standard /rw message that everone gets.
-let's see what happens!
-
----
-
-### Overview
-Lura Memory Game Helper is a World of Warcraft addon designed for the L’ura encounter. It provides a fast, visual system to build, manage, and broadcast memory patterns using a consistent arc-based layout.
+Lura Memory Game Helper is a World of Warcraft addon designed for the L’ura encounter. It provides a fast, visual system to build, manage, and broadcast memory patterns using a fixed arc-based layout.
 
 The addon emphasizes:
-- speed
-- clarity
-- minimal input friction
-- consistent spatial memory (arc layout never changes)
 
-**Full on Disclaimer** 
-- I have no idea if the broadcasting to other people with the addon will work at the moment. It will require testing. I have built in a fallback with the raidwarning however.
-- I plan to implement additional visual clarity in a near future update that will hopefully clear the confusion
+* speed
+* clarity
+* minimal input friction
+* consistent spatial memory (**arc layout never changes**)
 
-- Cross = Raid Marker X (Cross) red
-- Diamond = Raid Marker ♦ (diamond) purple
-- Triangle = Raid Marker ▼ (triangle) green
-- Bullseye = Raid Marker O (circle) orange
-- T/Nail = Raid Marker ★ (star) yellow
-
-- I am hoping this will be enough of a fallback it becomes a viable workaround for those that need this addon
 ---
 
-####
+## Symbol Mapping
 
-On the list for the near future
+* Cross = Raid Marker X (red)
+* Diamond = ♦ (purple)
+* Triangle = ▼ (green)
+* Circle = O (orange)
+* T / Star = ★ (yellow)
 
-- Minimap Icon and ability to move it to the add-on compartment
-- Settings window
-- True Scaling, not this drag a corner crap
-- Code moved into a modular structure to make my life easier (I never expected it to get this out of hand)
+---
 
-- This is the end of my babbeling 
-
-#### #######################################################################################################################################################################################################
-
-### Current Feature Set (v1.4.4)
+## Current Feature Set (v1.5.x)
 
 ### Pattern Interaction
-- Five-slot internal pattern system
-- Visual arc display (right-to-left mapping)
-- Click symbol buttons to insert
-- Click arc slots to clear individual positions
-- Drag-and-drop:
-  - filled → filled = swap
-  - filled → empty = move
+
+* Five-slot internal pattern system
+* Visual arc display (right-to-left mapping)
+* Click symbol buttons to insert
+* Click arc slots to clear
+* Drag-and-drop:
+
+  * filled → filled = swap
+  * filled → empty = move
 
 ---
 
 ### Smart Pattern Logic
-- Duplicate prevention
-- Smart autofill:
-  - fills final remaining slot automatically
-  - works after drag, swap, clear, undo
-- Auto-filled entries are visually dimmed
+
+* Duplicate prevention
+* Smart autofill (final slot auto-filled)
+* Works after:
+
+  * drag
+  * swap
+  * clear
+  * undo
+* Auto-filled entries are dimmed
 
 ---
 
 ### State Management
-- /lmg undo → restores previous state
-- /lmg redo → restores last full pattern
-- Stable state handling across all interactions
+
+* `/lmg undo` → restore previous state
+* `/lmg redo` → restore last full pattern
+* Stable state handling
 
 ---
 
 ### Lock System
-- /lmg locksend on|off
-- When enabled:
-  - pattern locks after sending
-  - prevents accidental edits
-- Requires clear or unlock to modify
+
+* `/lmg locksend on|off`
+* Locks pattern after send
+* Prevents accidental edits
+* Requires clear or unlock
 
 ---
 
 ### Difficulty System
+
 Supports dynamic slot modes:
 
-Normal:
-- Uses 3 slots (2,3,4)
+**Normal**
 
-Heroic / Mythic:
-- Uses all 5 slots - Mythic will have the CW/CCW logic added shortly. it requires some extra trickery
+* 3 slots (2,3,4)
 
-Dropdown options:
-- Auto
-- Normal (3)
-- Heroic (5)
-- Mythic (5) (this still needs the clockwise/counter clockwise logic added. Give me a week or so to get to it!)
+**Heroic / Mythic**
 
----
+* 5 slots
 
-### UI Features
-- Movable window
-- Resizable frame
-- Minimize / expand
-- Dynamic layout scaling
-- Texture-based UI
-- Custom icon system
+Dropdown:
+
+* Auto
+* Normal (3)
+* Heroic (5)
+* Mythic (5)
 
 ---
 
-### UI Polish (v1.4.4)
-- Centered difficulty dropdown
-- Boss label repositioned and resized
-- Improved frame background
-- Hover feedback for:
-  - arc slots
-  - buttons
-  - symbols
-  - checkbox
-- Lock status indicator added
+## 🆕 New Systems (v1.5.x)
+
+### Minimap Button (LibDataBroker + LibDBIcon)
+
+* Fully draggable
+* Works with:
+
+  * circular minimap
+  * square minimap
+  * ElvUI addon compartment
+* Left click → toggle window
+* Right click → settings
+
+---
+
+### Settings Window
+
+* Toggle autofill
+* Toggle duplicate prevention
+* Toggle lock-after-send
+* Toggle raid warning
+* Difficulty override dropdown
+* Test mode toggle
+* Changelog access
+
+---
+
+### Auto-Clear Timer (AceTimer-3.0)
+
+* Starts **only after pattern is sent**
+* Clears pattern automatically after delay
+* Unlocks pattern on clear
+
+Config:
+
+```lua
+AUTO_CLEAR_SECONDS = 10 -- change this for testing / tuning
+```
+
+---
+
+### Persistent Data (AceDB-3.0)
+
+* Window position
+* Window size
+* Collapse state
+* Settings
+* Minimap position
+
+---
+
+### Command System (AceConsole-3.0)
+
+Cleaner and more extensible command handling.
 
 ---
 
 ## Commands
 
 ### Core
+
+```
 /lmg
 /memorygame
 /luramemory
+```
 
 ### Window
+
+```
 /lmg show
 /lmg hide
+```
 
 ### Pattern
+
+```
 /lmg clear
 /lmg say
 /lmg undo
 /lmg redo
+```
 
 ### System
+
+```
 /lmg locksend on
 /lmg locksend off
 /lmg test
+/lmg settings
+/lmg minimap
+```
 
 ---
 
 ## Pattern Behavior
 
 ### Storage vs Display
-Internally:
-slot 1 → visual slot 5  
-slot 2 → visual slot 4  
-slot 3 → visual slot 3  
-slot 4 → visual slot 2  
-slot 5 → visual slot 1  
 
-Handled in redraw()
+Internal → Visual:
+
+```
+1 → 5  
+2 → 4  
+3 → 3  
+4 → 2  
+5 → 1  
+```
+
+Handled in `redraw()`
 
 ---
 
 ### Autofill Behavior
-Triggers when:
-- one empty slot
-- one unused symbol
 
-Works after:
-- drag
-- swap
-- clear
-- undo
+Triggers when:
+
+* one empty slot
+* one unused symbol
 
 ---
 
 ## Broadcast Behavior
 
-Send output:
-/say → [LMG] PATTERN: Diamond > Triangle > ...
+### Output
 
-Raid warning (optional):
->>> DIAMOND <> TRIANGLE <> CIRCLE <> CROSS <> tTt <<<
+```
+/say → [LMG] PATTERN: Diamond > Triangle > ...
+```
+
+Optional `/rw`:
+
+```
+>>> DIAMOND <> TRIANGLE <> CIRCLE <> CROSS <> T <<<
+```
 
 ---
 
 ### Permissions
-Broadcast allowed only if:
-- test mode enabled OR
-- player is raid leader or assistant
+
+Allowed if:
+
+* test mode OR
+* raid leader / assistant
 
 Otherwise:
-- send disabled
-- clear disabled
-- RW checkbox disabled
+
+* send disabled
+* clear disabled
+* RW disabled
 
 ---
 
 ## Layout System
 
-Uses shared arc constants:
+Uses fixed arc constants:
 
-ARC_RADIUS  
-ARC_BOTTOM_DOWN  
-ARC_ANGLES  
-SEP_RADIUS_FACTOR  
-SEP_ANGLES  
+* ARC_RADIUS
+* ARC_BOTTOM_DOWN
+* ARC_ANGLES
+* SEP_RADIUS_FACTOR
+* SEP_ANGLES
 
-Arc positioning is fixed and not modified by UI changes.
-
----
-
-## Textures
-
-Path:
-Interface\AddOns\LuraMemoryGameHelper\Textures\
-
-Includes:
-- frame assets
-- buttons
-- checkbox
-- separators
-- symbol icons
+⚠️ These are never modified dynamically.
 
 ---
 
-## Core Functions
+## Architecture (Post Ace3 Migration)
 
-Layout:
-recomputeSlots()
-applyLayout()
+Core systems now use:
 
-UI:
-buildMainFrame()
-buildTitleBar()
-buildArcDisplay()
-buildDifficultyDropdown()
-buildActionButtons()
-buildSymbolButtons()
+* AceDB → persistence
+* AceConsole → commands
+* AceTimer → delayed logic
+* LibDataBroker → launcher
+* LibDBIcon → minimap
 
-Pattern:
-addSymbol()
-clearState()
-sendPattern()
-saveUndoState()
-restoreUndoState()
+---
 
-Systems:
-applyRaidDifficultyPatternMode()
-playerCanBroadcast()
-updateBroadcastControls()
+## Known Behavior Notes
+
+* Timer only starts after sending pattern
+* Timer clears locked patterns safely
+* All async callbacks use forward-declared locals (prevents nil call errors)
 
 ---
 
 ## Changelog
 
-### v1.4.4 — UI Polish
-- centered dropdown
-- resized boss label
-- hover effects added
-- improved visuals
-- lock status indicator added
+### v1.5.x — Ace3 Foundation
 
-### v1.4.x — Difficulty System
-- 3-slot vs 5-slot modes
-- dropdown override
+* AceDB integration
+* AceConsole command system
+* AceTimer auto-clear system
+* LibDBIcon minimap button
+* Settings window added
+* Forward declaration system (fixes async bugs)
+
+### v1.4.4 — UI Polish 
+
+* centered dropdown
+* resized boss label
+* hover effects
+* improved visuals
+* lock status indicator
 
 ### v1.3.x — Lock + Redo
-- locksend system
-- redo system
-- stability fixes
+
+* locksend system
+* redo system
 
 ### v1.2.x — Smart Autofill
-- dynamic autofill logic
-- improved interaction stability
+
+* autofill logic improvements
 
 ### v1.1.x — Drag System
-- drag and drop
-- swapping
-- slot targeting fixes
+
+* drag and drop
+* swapping
+* slot targeting fixes
 
 ### v1.0.0 — Initial Release
-- core functionality
-- arc display
+
+* core functionality
+* arc display
+
+---
+
+## Future Plans
+
+* Mythic CW/CCW alternating pattern logic
+* Full modular file split (Core/UI/Pattern/etc.)
+* Improved scaling system
+* Additional visual clarity improvements
+
+---
