@@ -1,6 +1,6 @@
 # Lura Memory Game Helper
 
-Version: 1.5.10
+Version: 1.5.30
 
 Created by Tinaria
 
@@ -10,200 +10,165 @@ Inspired by Lura Tily Helper by tilynye.
 
 ## Some Upfront Information
 
-Must be Raid Lead or Assist for /RW broadcasting unless using test mode:
+Must be Raid Lead or Assist for `/rw` broadcasting unless using test mode:
 
-```
+```text
 /lmg test
 ```
 
 Broadcast behavior:
-
-* `/say` → `[LMG] PATTERN: 1 , 2 , 3 , 4 , 5`
-* `/rw` → fallback formatted message
+- `/say` → `[LMG] PATTERN: ...`
+- `/rw` → fallback formatted message
 
 ---
 
 ## Overview
 
-Lura Memory Game Helper is a World of Warcraft addon designed for the L’ura encounter. It provides a fast, visual system to build, manage, and broadcast memory patterns using a fixed arc-based layout.
+Lura Memory Game Helper is a World of Warcraft addon for the L’ura encounter. It provides a fast, visual system to build, manage, and broadcast memory patterns using a fixed arc-based layout.
 
 The addon emphasizes:
+- speed
+- clarity
+- minimal input friction
+- consistent spatial memory
 
-* speed
-* clarity
-* minimal input friction
-* consistent spatial memory (**arc layout never changes**)
+**The arc layout is not dynamically redesigned.**
 
 ---
 
 ## Symbol Mapping
 
-* Cross = Raid Marker X (red)
-* Diamond = ♦ (purple)
-* Triangle = ▼ (green)
-* Circle = O (orange)
-* T / Star = ★ (yellow)
+- Cross = Raid Marker X (red)
+- Diamond = ♦ (purple)
+- Triangle = ▼ (green)
+- Circle = O (orange)
+- T / Star = ★ (yellow)
 
 ---
 
-## Current Feature Set (v1.5.x)
+## Current Feature Set
 
 ### Pattern Interaction
-
-* Five-slot internal pattern system
-* Visual arc display (right-to-left mapping)
-* Click symbol buttons to insert
-* Click arc slots to clear
-* Drag-and-drop:
-
-  * filled → filled = swap
-  * filled → empty = move
-
----
+- five-slot internal pattern system
+- visual arc display with right-to-left internal mapping
+- click symbol buttons to insert
+- click arc slots to clear
+- drag-and-drop:
+  - filled → filled = swap
+  - filled → empty = move
 
 ### Smart Pattern Logic
-
-* Duplicate prevention
-* Smart autofill (final slot auto-filled)
-* Works after:
-
-  * drag
-  * swap
-  * clear
-  * undo
-* Auto-filled entries are dimmed
-
----
+- duplicate prevention
+- smart autofill for the last remaining slot
+- autofill survives drag, swap, clear, and undo flow
+- auto-filled entries are dimmed
 
 ### State Management
-
-* `/lmg undo` → restore previous state
-* `/lmg redo` → restore last full pattern
-* Stable state handling
-
----
-
-### Lock System
-
-* `/lmg locksend on|off`
-* Locks pattern after send
-* Prevents accidental edits
-* Requires clear or unlock
-
----
+- `/lmg undo`
+- `/lmg redo`
+- restore last full pattern support
+- stable lock / unlock behavior
 
 ### Difficulty System
-
 Supports dynamic slot modes:
 
 **Normal**
-
-* 3 slots (2,3,4)
+- 3 slots (2, 3, 4)
 
 **Heroic / Mythic**
+- 5 slots
 
-* 5 slots
+Dropdown modes:
+- Auto
+- Normal (3)
+- Heroic (5)
+- Mythic (5)
 
-Dropdown:
+### Auto-Clear Timer
+- timer starts only after pattern send
+- timer clears pattern automatically after delay
+- timer unlocks on clear
 
-* Auto
-* Normal (3)
-* Heroic (5)
-* Mythic (5)
-
----
-
-## 🆕 New Systems (v1.5.x)
-
-### Minimap Button (LibDataBroker + LibDBIcon)
-
-* Fully draggable
-* Works with:
-
-  * circular minimap
-  * square minimap
-  * ElvUI addon compartment
-* Left click → toggle window
-* Right click → settings
-
----
-
-### Settings Window
-
-* Toggle autofill
-* Toggle duplicate prevention
-* Toggle lock-after-send
-* Toggle raid warning
-* Difficulty override dropdown
-* Test mode toggle
-* Changelog access
-
----
-
-### Auto-Clear Timer (AceTimer-3.0)
-
-* Starts **only after pattern is sent**
-* Clears pattern automatically after delay
-* Unlocks pattern on clear
-
-Config:
-
+Current config:
 ```lua
-AUTO_CLEAR_SECONDS = 10 -- change this for testing / tuning
+AUTO_CLEAR_SECONDS = 10
 ```
 
----
+### Minimap Button
+- LibDataBroker + LibDBIcon based
+- draggable
+- works with circular minimap
+- works with square minimap
+- works with ElvUI addon compartment
+- left click → toggle main window
+- right click → open settings
 
-### Persistent Data (AceDB-3.0)
+### Settings Window
+- toggle autofill
+- toggle duplicate prevention
+- toggle lock-after-send
+- toggle raid warning
+- difficulty override dropdown
+- test mode toggle
+- changelog access
 
-* Window position
-* Window size
-* Collapse state
-* Settings
-* Minimap position
+### Persistent Data
+Backed by AceDB:
+- window position
+- window size
+- collapse state
+- settings
+- minimap position / hidden state
+- changelog dismissal state
 
----
-
-### Command System (AceConsole-3.0)
-
-Cleaner and more extensible command handling.
+### Command System
+Backed by AceConsole:
+- `/lmg`
+- `/memorygame`
+- `/luramemory`
 
 ---
 
 ## Commands
 
 ### Core
-
-```
+```text
 /lmg
 /memorygame
 /luramemory
 ```
 
 ### Window
-
-```
+```text
 /lmg show
 /lmg hide
+/lmg settings
+/lmg minimap
 ```
 
 ### Pattern
-
-```
+```text
 /lmg clear
 /lmg say
 /lmg undo
 /lmg redo
+/lmg restorefull
 ```
 
-### System
-
-```
+### Lock / Test
+```text
+/lmg lock
+/lmg unlock
 /lmg locksend on
 /lmg locksend off
 /lmg test
-/lmg settings
-/lmg minimap
+```
+
+### Informational
+```text
+/lmg changelog
+/lmg selfsync on
+/lmg selfsync off
 ```
 
 ---
@@ -212,140 +177,175 @@ Cleaner and more extensible command handling.
 
 ### Storage vs Display
 
-Internal → Visual:
+Internal → Visual
 
+```text
+1 → 5
+2 → 4
+3 → 3
+4 → 2
+5 → 1
 ```
-1 → 5  
-2 → 4  
-3 → 3  
-4 → 2  
-5 → 1  
-```
 
-Handled in `redraw()`
-
----
+Handled by the arc redraw logic.
 
 ### Autofill Behavior
-
-Triggers when:
-
-* one empty slot
-* one unused symbol
+Autofill triggers when:
+- exactly one empty active slot remains
+- exactly one unused symbol remains
 
 ---
 
 ## Broadcast Behavior
 
 ### Output
-
-```
-/say → [LMG] PATTERN: Diamond > Triangle > ...
+```text
+/say → [LMG] PATTERN: Diamond > Triangle > Circle > Cross > T
 ```
 
 Optional `/rw`:
-
-```
+```text
 >>> DIAMOND <> TRIANGLE <> CIRCLE <> CROSS <> T <<<
 ```
 
----
-
 ### Permissions
-
-Allowed if:
-
-* test mode OR
-* raid leader / assistant
+Broadcasting is allowed if:
+- test mode is enabled, or
+- the player is raid leader / assistant
 
 Otherwise:
-
-* send disabled
-* clear disabled
-* RW disabled
+- send is disabled
+- clear broadcast is disabled
+- RW is disabled
 
 ---
 
 ## Layout System
 
 Uses fixed arc constants:
+- `ARC_RADIUS`
+- `ARC_BOTTOM_DOWN`
+- `ARC_ANGLES`
+- `SEP_RADIUS_FACTOR`
+- `SEP_ANGLES`
 
-* ARC_RADIUS
-* ARC_BOTTOM_DOWN
-* ARC_ANGLES
-* SEP_RADIUS_FACTOR
-* SEP_ANGLES
-
-⚠️ These are never modified dynamically.
+These are intentionally not modified dynamically.
 
 ---
 
-## Architecture (Post Ace3 Migration)
+## Current Architecture
 
-Core systems now use:
+### Ace3 / library foundation
+- AceDB → persistence
+- AceConsole → commands
+- AceTimer → delayed logic
+- LibDataBroker → launcher
+- LibDBIcon → minimap integration
 
-* AceDB → persistence
-* AceConsole → commands
-* AceTimer → delayed logic
-* LibDataBroker → launcher
-* LibDBIcon → minimap
+### Current module layout
+```text
+Core.lua
+DB.lua
+Commands.lua
+Timer.lua
+Minimap.lua
+Settings.lua
+UI_Main.lua
+UI_Controls.lua
+UI_Arc.lua
+UI_Layout.lua
+```
+
+### What still remains in Core
+`Core.lua` still owns:
+- remaining event flow
+- pattern state machine
+- broadcast/chat logic
+- shared bridge exports used by the modular files
+
+---
+
+## Migration Status
+
+### Completed
+- AceDB migration
+- AceConsole migration
+- AceTimer migration
+- minimap split
+- settings split
+- UI split into main / controls / arc / layout modules
+
+### Next planned modules
+- `Events.lua`
+- `Broadcast.lua`
+- `Pattern.lua`
 
 ---
 
 ## Known Behavior Notes
-
-* Timer only starts after sending pattern
-* Timer clears locked patterns safely
-* All async callbacks use forward-declared locals (prevents nil call errors)
+- timer starts after local send and after receiving an incoming `[LMG] PATTERN:` sync
+- timer clears locked patterns safely
+- UI modules communicate through exported `LMG.*` bridge functions
+- arc behavior is preserved during migration and should not be changed casually
 
 ---
 
 ## Changelog
 
+### v1.5.30
+- incoming `[LMG] PATTERN:` now starts/resets the local auto-clear timer
+- added self-sync test toggle for local incoming `/say` testing
+
+### v1.5.29
+- moved WoW event registration into `Events.lua`
+- began module header and section comment pass
+
+### v1.5.28
+- verified stable modular baseline
+- UI modules split into:
+  - `UI_Main.lua`
+  - `UI_Controls.lua`
+  - `UI_Arc.lua`
+  - `UI_Layout.lua`
+- cleanup pass for duplicate / stale exports
+- documentation refresh started
+
 ### v1.5.x — Ace3 Foundation
+- AceDB integration
+- AceConsole command system
+- AceTimer auto-clear system
+- LibDBIcon minimap button
+- settings window added
+- forward declaration fixes for async callbacks
 
-* AceDB integration
-* AceConsole command system
-* AceTimer auto-clear system
-* LibDBIcon minimap button
-* Settings window added
-* Forward declaration system (fixes async bugs)
-
-### v1.4.4 — UI Polish 
-
-* centered dropdown
-* resized boss label
-* hover effects
-* improved visuals
-* lock status indicator
+### v1.4.4 — UI Polish
+- centered dropdown
+- resized boss label
+- hover effects
+- improved visuals
+- lock status indicator
 
 ### v1.3.x — Lock + Redo
-
-* locksend system
-* redo system
+- locksend system
+- redo system
 
 ### v1.2.x — Smart Autofill
-
-* autofill logic improvements
+- autofill logic improvements
 
 ### v1.1.x — Drag System
-
-* drag and drop
-* swapping
-* slot targeting fixes
+- drag and drop
+- swapping
+- slot targeting fixes
 
 ### v1.0.0 — Initial Release
-
-* core functionality
-* arc display
+- core functionality
+- arc display
 
 ---
 
 ## Future Plans
-
-* Mythic CW/CCW alternating pattern logic
-* Full modular file split (Core/UI/Pattern/etc.)
-* Improved scaling system
-* Additional visual clarity improvements
-
----
+- split `Events.lua`
+- split `Broadcast.lua`
+- split `Pattern.lua`
+- improve inline comments / module headers
+- keep README aligned with each stable migration pass
