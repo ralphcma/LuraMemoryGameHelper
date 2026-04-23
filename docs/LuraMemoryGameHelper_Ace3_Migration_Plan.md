@@ -19,9 +19,9 @@ Do **not** change:
 ## Recommended migration order
 
 ### Phase 1 — Infrastructure only
-Replace fragile plumbing first. No behavior changes intended.
+Replace fragile plumbing first. No behavior changes intended. - DONE
 
-#### Step 1 — AceDB-3.0
+#### Step 1 — AceDB-3.0 - DONE
 Move all manual SavedVariables handling into AceDB.
 
 Current manual persistence to replace:
@@ -71,7 +71,7 @@ local defaults = {
 }
 ```
 
-#### Step 2 — AceConsole-3.0
+#### Step 2 — AceConsole-3.0 - DONE
 Move slash command parsing into AceConsole.
 
 Commands to preserve:
@@ -93,7 +93,7 @@ Commands to preserve:
 - changelog
 - restorefull
 
-#### Step 3 — AceTimer-3.0
+#### Step 3 — AceTimer-3.0 - DONE
 Use timers for delayed functionality.
 
 First timer use:
