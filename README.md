@@ -24,7 +24,7 @@ Broadcast behavior:
 
 ## Overview
 
-Lura Memory Game Helper is a World of Warcraft addon for the L’ura encounter. It provides a fast, visual system to build, manage, and broadcast memory patterns using a fixed arc-based layout.
+Lura Memory Game Helper is a World of Warcraft addon for the L’ura encounter (midnight Falls). It provides a fast, visual system to build, manage, and broadcast memory patterns using a fixed arc-based layout.
 
 The addon emphasizes:
 - speed
@@ -244,6 +244,7 @@ These are intentionally not modified dynamically.
 
 ### Current module layout
 ```text
+Events.lua
 Core.lua
 DB.lua
 Commands.lua
@@ -354,6 +355,7 @@ UI_Layout.lua
 
 ## Future Plans
 - split `Events.lua`
+- split `Broadcast.lua`
 - split `Pattern.lua`
 - improve inline comments / module headers
-- keep README aligned with each stable migration pass
+
