@@ -2,7 +2,7 @@
 ## Title: Lura Memory Game Helper
 ## Notes: L'ura memory helper
 ## Author: Tinaria
-## Version: 1.5.30
+## Version: 1.5.31
 ## SavedVariables: LuraMemoryGameHelperDB
 
 libs/LibStub/LibStub.lua
@@ -19,6 +19,7 @@ Timer.lua
 Minimap.lua
 Commands.lua
 Events.lua
+Broadcast.lua
 Settings.lua
 UI_Main.lua
 UI_Controls.lua

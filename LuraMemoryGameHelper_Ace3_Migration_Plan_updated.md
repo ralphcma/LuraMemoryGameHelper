@@ -37,7 +37,6 @@ Do **not** change:
 - README now needs to be kept in sync with each functional milestone
 
 ### Not yet completed
-- `Broadcast.lua`
 - `Pattern.lua`
 - Core API consolidation / export cleanup
 - Commenting pass across modules
@@ -219,7 +218,7 @@ Move event wiring out of `Core.lua`:
 **Why next:**  
 This is the safest remaining structural split because it is mostly orchestration and event registration, not arc behavior.
 
-#### Step 5 — Broadcast.lua
+#### Step 5 — Broadcast.lua ✅
 Move chat/broadcast responsibilities:
 - outgoing `/say`
 - outgoing raid warning
@@ -326,7 +325,7 @@ We are **past** infrastructure and UI modularization.
 ---
 
 ## Recommendation
-Use **v1.5.29** as the working baseline and continue with:
+Use **v1.5.31** as the working baseline and continue with:
 1. documentation sync
 2. comments
-3. `Broadcast.lua` next
+3. `Pattern.lua` next

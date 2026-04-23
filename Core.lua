@@ -1,6 +1,6 @@
 -- ============================================================
 -- Lura Memory Game Helper
--- Version: 1.5.30
+-- Version: 1.5.31
 --
 -- Created By: Tinaria
 --
@@ -42,7 +42,7 @@
 local ADDON_NAME, LMG = ...
 LMG = LMG or {}
 ADDON_NAME = ADDON_NAME or "LuraMemoryGameHelper"
-local ADDON_VERSION = "1.5.30"
+local ADDON_VERSION = "1.5.31"
 local SAY_PREFIX = "[LMG]"
 local TEX = "Interface\\AddOns\\LuraMemoryGameHelper\\Textures\\"
 local MAX = 5
@@ -786,101 +786,16 @@ end
 -- ============================================================
 
 
-local function patternToText(pattern)
-    local parts = {}
-    for _, i in ipairs(getActiveSlotIndices()) do
-        local entry = pattern[i]
-        if entry then
-            parts[#parts + 1] = entry.label
-        end
-    end
-    return (#parts > 0) and table.concat(parts, " > ") or "(empty)"
-end
-
-local function currentPatternText()
-    return patternToText(state)
-end
-
--- ============================================================
--- Convert chat text back into a packed decoded array
--- ============================================================
-local function textToPattern(text)
-    local decoded = {}
-
-    for rawPart in tostring(text):gmatch("([^>]+)") do
-        local sym = getSymByLabel(rawPart)
-        if sym then
-            decoded[#decoded + 1] = sym
-            if #decoded >= MAX then
-                break
-            end
-        end
-    end
-
-    return decoded
-end
-
--- ============================================================
--- Convert labels to raid-warning output text
--- ============================================================
-local function rwLabelForSymbol(label)
-    local map = {
-        Diamond = "DIAMOND",
-        Triangle = "TRIANGLE",
-        Circle = "CIRCLE",
-        Cross = "CROSS",
-        T = "tTt",
-    }
-    return map[label] or label:upper()
-end
-
-local function buildRWText()
-    local parts = {}
-    for _, i in ipairs(getActiveSlotIndices()) do
-        local entry = state[i]
-        if entry then
-            parts[#parts + 1] = rwLabelForSymbol(entry.label)
-        end
-    end
-    if #parts == 0 then
-        return nil
-    end
-    return ">>> " .. table.concat(parts, " <> ") .. " <<<"
-end
-
--- ============================================================
--- Permission check for broadcasting actions
--- ============================================================
-local function playerCanBroadcast()
-    if testMode then
-        return true
-    end
-
-    if not IsInRaid() then
-        return false
-    end
-
-    return UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")
-end
-
-local function maybeSendRW()
-    if not alsoSendRW or not stateHasAnyEntries() then
-        return
-    end
-
-    local rwText = buildRWText()
-    if rwText then
-        SendChatMessage(rwText, "RAID_WARNING")
-    end
-end
-
--- ============================================================
--- Enable / disable controls based on permissions
--- ============================================================
+-----------------------------------------------------------------------
+-- Broadcast-related UI state
+--
+-- This remains in Core because it directly manipulates live frame
+-- widgets. The permission decision itself is now owned by Broadcast.lua.
+-----------------------------------------------------------------------
 local function updateBroadcastControls()
     if not win then return end
 
-    local enabled = playerCanBroadcast()
+    local enabled = LMG.PlayerCanBroadcast and LMG.PlayerCanBroadcast() or false
 
     if win.clearBtn then
         win.clearBtn:SetEnabled(enabled)
@@ -983,9 +898,19 @@ local function doClear(sendChat)
     clearState()
     isPatternLocked = false
     if LMG.Redraw then LMG.Redraw() end
-    if sendChat then
-        SendChatMessage(SAY_PREFIX .. " CLEAR", "SAY")
-    end
+
+    -------------------------------------------------------------------
+    -- BACKUP ONLY: [LMG] CLEAR broadcast path
+    --
+    -- This path is intentionally disabled. The addon now treats an
+    -- incoming [LMG] PATTERN message as the start of that pattern's
+    -- local lifetime and clears through the timer instead of syncing a
+    -- later CLEAR message.
+    --
+    -- if sendChat then
+    --     SendChatMessage(SAY_PREFIX .. " CLEAR", "SAY")
+    -- end
+    -------------------------------------------------------------------
 end
 
 local function sendPattern()
@@ -1152,72 +1077,7 @@ local function autoHandleTargetRaid()
     end
 end
 
-local function parsePayload(msg)
-    local payload = msg and msg:match("^%[LMG%]%s*(.+)$")
-    if not payload then
-        return nil
-    end
 
-    payload = trim(payload)
-
-    if payload == "CLEAR" then
-        return "clear"
-    end
-
-    local patternText = payload:match("^PATTERN:%s*(.+)$")
-    if patternText then
-        return "pattern", patternText
-    end
-
-    return nil
-end
-
-local function handleSayMessage(msg, author)
-    -------------------------------------------------------------------
-    -- Incoming [LMG] chat sync
-    --
-    -- By default we ignore our own addon-formatted /say messages so a
-    -- local send cannot race against the UI's existing state updates.
-    --
-    -- For local testing, this guard can be bypassed temporarily through
-    -- the self-sync test toggle exposed in Commands.lua.
-    -------------------------------------------------------------------
-    local playerName = UnitName("player")
-    if not allowSelfTestSync and author and playerName and author:match("^" .. playerName) then
-        return
-    end
-
-    local kind, value = parsePayload(msg)
-
-    if kind == "clear" then
-        doClear(false)
-        return
-    end
-
-    if kind == "pattern" then
-        local decoded = textToPattern(value)
-        if #decoded > 0 then
-            local lockedBeforeSync = isPatternLocked
-            setStateFromDecoded(decoded)
-            autoFillRemainingSlotIfNeeded()
-            saveLastFullPatternIfComplete()
-            isPatternLocked = lockedBeforeSync
-
-            if win and not win:IsShown() then
-                win:Show()
-            end
-
-            ----------------------------------------------------------------
-            -- A received pattern now owns its own local lifetime.
-            -- Instead of relying on a later synced CLEAR message, receiving
-            -- a pattern starts/resets the local auto-clear timer here.
-            ----------------------------------------------------------------
-            refreshAutoClearTimer()
-
-            if LMG.Redraw then LMG.Redraw() end
-        end
-    end
-end
 
 
 -----------------------------------------------------------------------
@@ -1228,11 +1088,9 @@ end
 -- this bridge instead of reaching for Core locals directly.
 -----------------------------------------------------------------------
 LMG.NotifyInfo = notifyInfo
-LMG.PlayerCanBroadcast = playerCanBroadcast
 LMG.UpdateBroadcastControls = updateBroadcastControls
 LMG.SaveUndoState = saveUndoState
 LMG.DoClear = doClear
-LMG.SendPattern = sendPattern
 LMG.ShowWindow = showWindow
 LMG.HideWindow = hideWindow
 LMG.RestoreUndoState = restoreUndoState
@@ -1248,6 +1106,19 @@ LMG.GetAutoFill = function() return AUTO_FILL_SLOT5 end
 LMG.SetAutoFill = function(v) AUTO_FILL_SLOT5 = not not v end
 LMG.GetPreventDuplicates = function() return PREVENT_DUPLICATES end
 LMG.SetPreventDuplicates = function(v) PREVENT_DUPLICATES = not not v end
+LMG.GetSayPrefix = function() return SAY_PREFIX end
+LMG.GetSymbols = function() return SYMS end
+LMG.StateHasAnyEntries = stateHasAnyEntries
+LMG.GetState = function() return state end
+LMG.GetActiveSlotIndices = getActiveSlotIndices
+LMG.GetLockAfterSend = function() return LOCK_AFTER_SEND end
+LMG.SetPatternLocked = function(v) isPatternLocked = not not v end
+LMG.SaveLastFullPatternIfComplete = saveLastFullPatternIfComplete
+LMG.CurrentPatternText = currentPatternText
+LMG.SetStateFromDecoded = setStateFromDecoded
+LMG.AutoFillRemainingSlotIfNeeded = autoFillRemainingSlotIfNeeded
+LMG.GetPatternLocked = function() return isPatternLocked end
+LMG.GetWindow = function() return win end
 LMG.BuildChangelogFrame = buildChangelogFrame
 LMG.GetChangelogFrame = function() return changelogFrame end
 LMG.GetAlsoSendRW = function() return alsoSendRW end
@@ -1378,4 +1249,3 @@ end
 
 LMG.ShowChangelogIfNeeded = showChangelogIfNeeded
 LMG.HandleRosterOrZoneChange = autoHandleTargetRaid
-LMG.HandleIncomingSay = handleSayMessage

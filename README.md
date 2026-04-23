@@ -1,6 +1,6 @@
 # Lura Memory Game Helper
 
-Version: 1.5.30
+Version: 1.5.31
 
 Created by Tinaria
 
@@ -247,6 +247,8 @@ These are intentionally not modified dynamically.
 Core.lua
 DB.lua
 Commands.lua
+Events.lua
+Broadcast.lua
 Timer.lua
 Minimap.lua
 Settings.lua
@@ -292,9 +294,16 @@ UI_Layout.lua
 
 ## Changelog
 
+### v1.5.31
+- extracted `Broadcast.lua`
+- moved outgoing /say, RW formatting, and incoming payload parsing into a dedicated module
+- left `[LMG] CLEAR` fully commented out as a non-functional backup path
+- added module headers and section comments for broadcast flow
+
 ### v1.5.30
 - incoming `[LMG] PATTERN:` now starts/resets the local auto-clear timer
 - added self-sync test toggle for local incoming `/say` testing
+- `[LMG] CLEAR` left commented out as a backup-only, non-functional path
 
 ### v1.5.29
 - moved WoW event registration into `Events.lua`
@@ -345,7 +354,6 @@ UI_Layout.lua
 
 ## Future Plans
 - split `Events.lua`
-- split `Broadcast.lua`
 - split `Pattern.lua`
 - improve inline comments / module headers
 - keep README aligned with each stable migration pass
